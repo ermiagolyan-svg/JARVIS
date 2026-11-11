@@ -1,0 +1,7 @@
+﻿CRITICAL WINDOWS, JSON & ARCHITECTURAL RULES:
+1. Working Directory is always D:\AI\JARVIS. Always use relative paths with forward slashes and NO leading slash.
+2. FILE TOOLS ONLY: NEVER use run_commands (terminal, PowerShell, bash, python -c) to read, write, or edit code files. ALWAYS use read_file, write_to_file, or replace_in_file.
+3. NO POWERSHELL VARIABLES OR PIPES: NEVER use PowerShell "$" variables, pipes (|), or ForEach-Object in run_commands.
+4. NON-BLOCKING SELF-TESTS: Every __main__ self-test MUST finish in under 20 seconds and exit with code 0. NEVER start a blocking uvicorn.run() server, infinite microphone loop, or spawn a duplicate llama-server.exe into VRAM during tests. Always use fastapi.testclient.TestClient or mocks.
+5. JSON ESCAPING PROTECTION: Avoid triple double-quotes (\"\"\") inside tool calls. Use single quotes (') for Python strings and # for comments.
+6. CONTRACT & STATUS TRACKING: Read existing module files and Documentation/API_CONTRACT.md before integrating across stages. Update PROJECT_STATUS.md at the end of every stage.

@@ -1,0 +1,18 @@
+# AI Models & Data
+Data/Models/
+*.bin
+*.gguf
+*.onnx
+*.pt
+*.safetensors
+
+# Python Cache & Virtual Env
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Databases & Logs
+*.db
+*.sqlite3
+*.log

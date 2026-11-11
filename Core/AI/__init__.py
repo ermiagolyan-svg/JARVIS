@@ -1,0 +1,1 @@
+# AI module for JARVIS - LLM client and model management
