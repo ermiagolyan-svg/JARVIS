@@ -3,38 +3,96 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-        <!-- Core Holographic Colors -->
-        <Color x:Key="BgDeepNavyColor">#050B14</Color>
-        <Color x:Key="BgPanelColor">#091426</Color>
-        <Color x:Key="BgCardColor">#0D1F38</Color>
-        <Color x:Key="CyanPrimaryColor">#00E5FF</Color>
-        <Color x:Key="CyanSecondaryColor">#0088CC</Color>
-        <Color x:Key="AlertRedColor">#FF3366</Color>
-        <Color x:Key="ActiveGreenColor">#00FFAA</Color>
-        <Color x:Key="WarningAmberColor">#FFB300</Color>
-        <Color x:Key="TextPrimaryColor">#E6F9FF</Color>
-        <Color x:Key="TextMutedColor">#6C99B8</Color>
+        <!-- Default Theme 1: Cyber-Ice Dark Palette (Dynamically swappable with Theme 2 LCD Light) -->
+        <SolidColorBrush x:Key="BgDeepNavyBrush" Color="#05070B"/>
 
-        <!-- Solid Brushes -->
-        <SolidColorBrush x:Key="BgDeepNavyBrush" Color="{StaticResource BgDeepNavyColor}"/>
-        <SolidColorBrush x:Key="BgPanelBrush" Color="{StaticResource BgPanelColor}"/>
-        <SolidColorBrush x:Key="BgCardBrush" Color="{StaticResource BgCardColor}"/>
-        <SolidColorBrush x:Key="CyanPrimaryBrush" Color="{StaticResource CyanPrimaryColor}"/>
-        <SolidColorBrush x:Key="CyanSecondaryBrush" Color="{StaticResource CyanSecondaryColor}"/>
-        <SolidColorBrush x:Key="AlertRedBrush" Color="{StaticResource AlertRedColor}"/>
-        <SolidColorBrush x:Key="ActiveGreenBrush" Color="{StaticResource ActiveGreenColor}"/>
-        <SolidColorBrush x:Key="WarningAmberBrush" Color="{StaticResource WarningAmberColor}"/>
-        <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}"/>
-        <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMutedColor}"/>
-        <SolidColorBrush x:Key="CyanBorderDimBrush" Color="#3300E5FF"/>
+        <RadialGradientBrush x:Key="BackdropRadialBrush" Center="0.5,0.5" RadiusX="0.75" RadiusY="0.75">
+            <GradientStop Color="#0D1526" Offset="0.0"/>
+            <GradientStop Color="#070A12" Offset="0.55"/>
+            <GradientStop Color="#040508" Offset="1.0"/>
+        </RadialGradientBrush>
 
-        <!-- Holographic Button Style -->
+        <LinearGradientBrush x:Key="BgPanelBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#F00E1525" Offset="0.0"/>
+            <GradientStop Color="#F5080C14" Offset="1.0"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="BgCardBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#CC162033" Offset="0.0"/>
+            <GradientStop Color="#CC0F1624" Offset="1.0"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="GlassBorderBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#5538BDF8" Offset="0.0"/>
+            <GradientStop Color="#1838BDF8" Offset="0.5"/>
+            <GradientStop Color="#4400F0FF" Offset="1.0"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="CyanGradientBrush" StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Color="#0284C7" Offset="0.0"/>
+            <GradientStop Color="#38BDF8" Offset="0.5"/>
+            <GradientStop Color="#00F0FF" Offset="1.0"/>
+        </LinearGradientBrush>
+
+        <SolidColorBrush x:Key="BgInputBrush" Color="#090D16"/>
+        <SolidColorBrush x:Key="BgSubtlePillBrush" Color="#090D16"/>
+        <SolidColorBrush x:Key="BgDockPillBrush" Color="#CC090D16"/>
+        <SolidColorBrush x:Key="GridBgBrush" Color="#080B12"/>
+        <SolidColorBrush x:Key="GridRowBrush" Color="#0B101B"/>
+        <SolidColorBrush x:Key="GridAltRowBrush" Color="#0F1624"/>
+        <SolidColorBrush x:Key="GridHeaderBrush" Color="#131C2E"/>
+
+        <SolidColorBrush x:Key="CyanPrimaryBrush" Color="#38BDF8"/>
+        <SolidColorBrush x:Key="CyanSecondaryBrush" Color="#00F0FF"/>
+        <SolidColorBrush x:Key="AlertRedBrush" Color="#F43F5E"/>
+        <SolidColorBrush x:Key="ActiveGreenBrush" Color="#10B981"/>
+        <SolidColorBrush x:Key="WarningAmberBrush" Color="#F59E0B"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F8FAFC"/>
+        <SolidColorBrush x:Key="TextMutedBrush" Color="#64748B"/>
+        <SolidColorBrush x:Key="CyanBorderDimBrush" Color="#2838BDF8"/>
+
+        <SolidColorBrush x:Key="BtnDefaultBgBrush" Color="#1638BDF8"/>
+        <SolidColorBrush x:Key="BtnDefaultBorderBrush" Color="#4538BDF8"/>
+        <SolidColorBrush x:Key="BtnHoverBgBrush" Color="#2E38BDF8"/>
+
+        <!-- Shared Drop Shadows & Glows -->
+        <DropShadowEffect x:Key="PanelShadowEffect" BlurRadius="28" ShadowDepth="8" Direction="270" Color="#000000" Opacity="0.70"/>
+        <DropShadowEffect x:Key="CyanGlowEffect" BlurRadius="14" ShadowDepth="0" Color="#00F0FF" Opacity="0.45"/>
+        <DropShadowEffect x:Key="CrimsonGlowEffect" BlurRadius="16" ShadowDepth="0" Color="#F43F5E" Opacity="0.5"/>
+
+        <!-- Minimalist Modern ScrollBar -->
+        <Style TargetType="ScrollBar">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent" Width="6">
+                            <Track x:Name="PART_Track" IsDirectionReversed="true">
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border Background="{DynamicResource CyanPrimaryBrush}" Opacity="0.45" CornerRadius="3"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern Holo Button Style -->
         <Style x:Key="HoloButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="#1400E5FF"/>
-            <Setter Property="Foreground" Value="{StaticResource CyanPrimaryBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource CyanPrimaryBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource BtnDefaultBgBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BtnDefaultBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="FontSize" Value="11.5"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -44,19 +102,17 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4"
+                                CornerRadius="8"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#3300E5FF"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource BtnHoverBgBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource CyanSecondaryBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#5500E5FF"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.45"/>
+                                <Setter TargetName="border" Property="Opacity" Value="0.75"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -64,38 +120,188 @@
             </Setter>
         </Style>
 
-        <!-- Danger Button Style -->
+        <!-- Crimson Core Danger Button -->
         <Style x:Key="HoloDangerButtonStyle" TargetType="Button" BasedOn="{StaticResource HoloButtonStyle}">
-            <Setter Property="Background" Value="#1AFF3366"/>
-            <Setter Property="Foreground" Value="{StaticResource AlertRedBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource AlertRedBrush}"/>
+            <Setter Property="Background" Value="#1AF43F5E"/>
+            <Setter Property="Foreground" Value="{DynamicResource AlertRedBrush}"/>
+            <Setter Property="BorderBrush" Value="#88F43F5E"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#38F43F5E"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AlertRedBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#55F43F5E"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
-        <!-- Success Button Style -->
+        <!-- Quantum Cyan / High-Contrast Active Button -->
         <Style x:Key="HoloSuccessButtonStyle" TargetType="Button" BasedOn="{StaticResource HoloButtonStyle}">
-            <Setter Property="Background" Value="#1A00FFAA"/>
-            <Setter Property="Foreground" Value="{StaticResource ActiveGreenBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource ActiveGreenBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource BtnDefaultBgBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource CyanSecondaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CyanSecondaryBrush}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
         </Style>
 
-        <!-- Holographic TextBox Style -->
+        <!-- Window Chrome Control Buttons (FullScreen / Minimize / Maximize / Close) -->
+        <Style x:Key="WindowControlButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource BtnHoverBgBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource CyanSecondaryBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="WindowCloseButtonStyle" TargetType="Button" BasedOn="{StaticResource WindowControlButtonStyle}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="Transparent" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#E11D48"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern Rounded TextBox -->
         <Style x:Key="HoloTextBoxStyle" TargetType="TextBox">
-            <Setter Property="Background" Value="#071120"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="CaretBrush" Value="{StaticResource CyanPrimaryBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource CyanSecondaryBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource BgInputBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource CyanSecondaryBrush}"/>
+            <Setter Property="SelectionBrush" Value="#5538BDF8"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BtnDefaultBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="Padding" Value="12,8"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource CyanPrimaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource CyanSecondaryBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
-        <!-- Holographic ProgressBar Style -->
+        <!-- Modern Pill ProgressBar -->
         <Style x:Key="HoloProgressBarStyle" TargetType="ProgressBar">
-            <Setter Property="Background" Value="#06101E"/>
-            <Setter Property="Foreground" Value="{StaticResource CyanPrimaryBrush}"/>
-            <Setter Property="BorderBrush" Value="#3300E5FF"/>
+            <Setter Property="Background" Value="{DynamicResource BgInputBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource CyanGradientBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CyanBorderDimBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Height" Value="10"/>
+            <Setter Property="Height" Value="8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid MinHeight="8">
+                            <Border x:Name="PART_Track"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="4"/>
+                            <Border x:Name="PART_Indicator"
+                                    HorizontalAlignment="Left"
+                                    Background="{TemplateBinding Foreground}"
+                                    CornerRadius="4"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern Audio/DSP Slider Style -->
+        <Style TargetType="Slider">
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid VerticalAlignment="Center">
+                            <Border Height="4" Background="{DynamicResource BgInputBrush}" BorderBrush="{DynamicResource CyanBorderDimBrush}" BorderThickness="1" CornerRadius="2" VerticalAlignment="Center"/>
+                            <Track x:Name="PART_Track">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="Slider.DecreaseLarge" Opacity="0" IsTabStop="False"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="Slider.IncreaseLarge" Opacity="0" IsTabStop="False"/>
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Ellipse x:Name="thumbDot" Width="14" Height="14" Fill="{DynamicResource CyanSecondaryBrush}" Stroke="{DynamicResource BgDeepNavyBrush}" StrokeThickness="2"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern ComboBox Style -->
+        <Style TargetType="ComboBox">
+            <Setter Property="Background" Value="{DynamicResource BgInputBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource CyanSecondaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BtnDefaultBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="11.5"/>
         </Style>
     </Application.Resources>
 </Application>

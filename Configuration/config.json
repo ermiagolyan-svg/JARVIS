@@ -1,6 +1,7 @@
 {
     "system": {
-        "project_name": "JARVIS",
+        "project_name": "CELESTE",
+        "assistant_name": "C.E.L.E.S.T.E.",
         "version": "1.0.0",
         "language": "fa",
         "fallback_language": "en",
@@ -31,9 +32,10 @@
         "stt_compute_type": "int8",
         "tts_model_path": "Data/Models/piper/fa_IR-gyro-medium.onnx",
         "sample_rate": 16000,
-        "dsp_pitch_semitones": -2.5,
-        "dsp_metallic_mix": 0.22,
-        "dsp_reverb_decay": 0.18
+        "speech_rate": 1.06,
+        "dsp_pitch_semitones": -0.3,
+        "dsp_metallic_mix": 0.10,
+        "dsp_reverb_decay": 0.30
     },
     "network": {
         "host": "0.0.0.0",

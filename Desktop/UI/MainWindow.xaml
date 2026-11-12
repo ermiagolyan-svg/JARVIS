@@ -1,51 +1,57 @@
 ﻿<Window x:Class="JarvisDesktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="J.A.R.V.I.S. MARK VII TERMINAL"
-        Height="940" Width="1680" MinHeight="800" MinWidth="1360"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="C.E.L.E.S.T.E. // CYBERNETIC ENGINE FOR LOGIC, ENGINEERING &amp; STRATEGIC TACTICAL EXECUTION"
+        Height="920" Width="1640" MinHeight="720" MinWidth="1200"
         WindowStartupLocation="CenterScreen"
-        Background="{StaticResource BgDeepNavyBrush}"
-        Foreground="{StaticResource TextPrimaryBrush}"
-        FontFamily="Segoe UI">
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        Background="{DynamicResource BgDeepNavyBrush}"
+        Foreground="{DynamicResource TextPrimaryBrush}"
+        FontFamily="Segoe UI"
+        KeyDown="MainWindow_KeyDown">
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            ResizeBorderThickness="6"
+                            GlassFrameThickness="0"
+                            CornerRadius="12"
+                            UseAeroCaptionButtons="False"/>
+    </shell:WindowChrome.WindowChrome>
 
     <Window.Resources>
-        <!-- Dark Holographic TabControl & TabItem -->
+        <!-- Modern Pill TabControl -->
         <Style TargetType="TabControl">
-            <Setter Property="Background" Value="{StaticResource BgPanelBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource CyanBorderDimBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
         </Style>
 
         <Style TargetType="TabItem">
-            <Setter Property="Background" Value="#071120"/>
-            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
-            <Setter Property="BorderBrush" Value="#3300E5FF"/>
+            <Setter Property="Background" Value="{DynamicResource BgInputBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CyanBorderDimBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="12,7"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
-                        <Border x:Name="Border"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="1,1,1,0"
-                                CornerRadius="4,4,0,0"
-                                Margin="2,0,2,0"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter x:Name="ContentSite"
-                                              VerticalAlignment="Center"
-                                              HorizontalAlignment="Center"
-                                              ContentSource="Header"/>
+                        <Border x:Name="Border" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                                CornerRadius="8" Margin="0,0,6,6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="#1A00E5FF"/>
-                                <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource CyanPrimaryBrush}"/>
-                                <Setter Property="Foreground" Value="{StaticResource CyanPrimaryBrush}"/>
-                            </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource BtnDefaultBgBrush}"/>
+                                <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource CyanSecondaryBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource CyanSecondaryBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -53,618 +59,574 @@
             </Setter>
         </Style>
 
-        <!-- Dark DataGrid Style -->
+        <!-- Clean ListBoxItem -->
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern Cyber DataGrid -->
         <Style TargetType="DataGrid">
-            <Setter Property="Background" Value="#06101E"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="BorderBrush" Value="#3300E5FF"/>
+            <Setter Property="Background" Value="{DynamicResource GridBgBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CyanBorderDimBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="RowBackground" Value="#081528"/>
-            <Setter Property="AlternatingRowBackground" Value="#0B1C34"/>
+            <Setter Property="RowBackground" Value="{DynamicResource GridRowBrush}"/>
+            <Setter Property="AlternatingRowBackground" Value="{DynamicResource GridAltRowBrush}"/>
             <Setter Property="GridLinesVisibility" Value="Horizontal"/>
-            <Setter Property="HorizontalGridLinesBrush" Value="#1E00E5FF"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource CyanBorderDimBrush}"/>
             <Setter Property="HeadersVisibility" Value="Column"/>
             <Setter Property="CanUserAddRows" Value="False"/>
             <Setter Property="IsReadOnly" Value="True"/>
-            <Setter Property="SelectionMode" Value="Single"/>
+            <Setter Property="RowHeaderWidth" Value="0"/>
         </Style>
 
         <Style TargetType="DataGridColumnHeader">
-            <Setter Property="Background" Value="#0D223F"/>
-            <Setter Property="Foreground" Value="{StaticResource CyanPrimaryBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource GridHeaderBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource CyanPrimaryBrush}"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Padding" Value="8,6"/>
-            <Setter Property="BorderBrush" Value="#3300E5FF"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CyanBorderDimBrush}"/>
             <Setter Property="BorderThickness" Value="0,0,1,1"/>
+        </Style>
+
+        <Style TargetType="DataGridCell">
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border x:Name="cellBd" Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="cellBd" Property="Background" Value="{DynamicResource BtnDefaultBgBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource CyanSecondaryBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
-    <Grid Margin="14">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="68"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="30"/>
-        </Grid.RowDefinitions>
+    <!-- Outer Window Frame Border -->
+    <Border x:Name="OuterFrameBorder" BorderBrush="{DynamicResource CyanBorderDimBrush}" BorderThickness="1">
+        <Grid ClipToBounds="True">
+            <!-- ==================== LAYER 0: FULL-SCREEN CELESTE COSMIC STAR SPHERE ==================== -->
+            <Grid Background="{DynamicResource BackdropRadialBrush}" MouseDown="CosmicBackdrop_MouseDown">
+                <!-- Subtle Ambient Radial Halo (Hidden in LCD Light Mode for 100% pure white transparency) -->
+                <Ellipse x:Name="AmbientHalo" Width="680" Height="680" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+                    <Ellipse.Fill>
+                        <RadialGradientBrush>
+                            <GradientStop x:Name="HaloInnerStop" Color="#2838BDF8" Offset="0.0"/>
+                            <GradientStop Color="#0C00F0FF" Offset="0.50"/>
+                            <GradientStop Color="#0005070B" Offset="1.0"/>
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
 
-        <!-- ==================== 1. TOP HEADER BAR ==================== -->
-        <Border Grid.Row="0" Background="{StaticResource BgPanelBrush}"
-                BorderBrush="{StaticResource CyanPrimaryBrush}" BorderThickness="1"
-                CornerRadius="6" Padding="18,8" Margin="0,0,0,12">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+                <!-- Dynamic 3D Star Sphere (740 Stars), Orbital Rings & Listening Wave Canvas -->
+                <Canvas x:Name="CosmicSphereCanvas" Width="820" Height="820"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
 
-                <!-- System Title -->
-                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,22,0">
-                    <TextBlock Text="J.A.R.V.I.S. MARK VII TERMINAL"
-                               Foreground="{StaticResource CyanPrimaryBrush}"
-                               FontSize="18" FontWeight="Bold"/>
-                    <TextBlock Text="JUST A RATHER VERY INTELLIGENT SYSTEM // CORE HUD"
-                               Foreground="{StaticResource TextMutedBrush}"
-                               FontSize="10"/>
+                <!-- Bottom Center Holographic Identity Caption -->
+                <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,68" IsHitTestVisible="False">
+                    <TextBlock x:Name="TxtCenterStateTitle" Text="C  ·  E  ·  L  ·  E  ·  S  ·  T  ·  E"
+                               Foreground="{DynamicResource CyanSecondaryBrush}" FontSize="21" FontWeight="Bold"
+                               HorizontalAlignment="Center" Opacity="0.95"/>
+                    <TextBlock x:Name="TxtReactorSubtitle"
+                               Text="CYBERNETIC ENGINE ONLINE"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="12" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" Margin="0,6,0,0"/>
                 </StackPanel>
-
-                <!-- Live State Badge -->
-                <Border x:Name="StateBadgeBorder" Grid.Column="1"
-                        Background="#1800E5FF" BorderBrush="{StaticResource CyanPrimaryBrush}"
-                        BorderThickness="1" CornerRadius="4" Padding="14,5" VerticalAlignment="Center" Margin="0,0,18,0">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Ellipse x:Name="StateLed" Width="10" Height="10" Fill="{StaticResource CyanPrimaryBrush}" Margin="0,0,8,0"/>
-                        <TextBlock x:Name="TxtSystemState" Text="IDLE"
-                                   Foreground="{StaticResource CyanPrimaryBrush}"
-                                   FontWeight="Bold" FontSize="13"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Model Status Badge -->
-                <Border Grid.Column="2" Background="#071324" BorderBrush="#3300E5FF"
-                        BorderThickness="1" CornerRadius="4" Padding="12,5"
-                        HorizontalAlignment="Left" VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="AI ENGINE:" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Margin="0,0,6,0"/>
-                        <TextBlock x:Name="TxtModelStatus" Text="Qwen 3.5 9B - llama.cpp CUDA [READY]"
-                                   Foreground="{StaticResource ActiveGreenBrush}" FontWeight="SemiBold" FontSize="12"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Lumia 950 XL Connection Status -->
-                <Border Grid.Column="3" Background="#071324" BorderBrush="#3300E5FF"
-                        BorderThickness="1" CornerRadius="4" Padding="12,5"
-                        VerticalAlignment="Center" Margin="0,0,12,0">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Ellipse x:Name="LumiaLed" Width="9" Height="9" Fill="{StaticResource TextMutedBrush}" Margin="0,0,7,0"/>
-                        <TextBlock x:Name="TxtLumiaStatus" Text="LUMIA 950 XL: DISCONNECTED"
-                                   Foreground="{StaticResource TextMutedBrush}" FontWeight="SemiBold" FontSize="12"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Pairing PIN Readout -->
-                <Border Grid.Column="4" Background="#071324" BorderBrush="{StaticResource CyanSecondaryBrush}"
-                        BorderThickness="1" CornerRadius="4" Padding="12,5"
-                        VerticalAlignment="Center" Margin="0,0,12,0">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="PAIR PIN:" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Margin="0,0,6,0"/>
-                        <TextBlock x:Name="TxtPairingPin" Text="------"
-                                   Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" FontSize="13"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Master Mute Toggle Button -->
-                <Button x:Name="BtnMasterMute" Grid.Column="5"
-                        Content="MIC ACTIVE" Width="135"
-                        Style="{StaticResource HoloSuccessButtonStyle}"
-                        Click="BtnMasterMute_Click"/>
             </Grid>
-        </Border>
 
-        <!-- ==================== 2. MAIN 3-COLUMN WORKSPACE ==================== -->
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="340"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="480"/>
-            </Grid.ColumnDefinitions>
+            <!-- ==================== LAYER 1: FLOATING GLASS TOP HUD BAR ==================== -->
+            <Border VerticalAlignment="Top" HorizontalAlignment="Stretch" Margin="20,14,20,0"
+                    Background="{DynamicResource BgPanelBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                    CornerRadius="14" Padding="18,10" Effect="{StaticResource PanelShadowEffect}"
+                    MouseLeftButtonDown="TopHudBar_MouseLeftButtonDown">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-            <!-- ========== LEFT PANEL: HARDWARE TELEMETRY HUD ========== -->
-            <Border Grid.Column="0" Background="{StaticResource BgPanelBrush}"
-                    BorderBrush="#3300E5FF" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,0,12,0">
+                    <!-- Brand Identity -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,20,0">
+                        <Border Width="4" Height="28" Background="{DynamicResource CyanGradientBrush}" CornerRadius="2" Margin="0,0,12,0"/>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="C.E.L.E.S.T.E. COMMAND CORE" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="14.5" FontWeight="Bold"/>
+                            <TextBlock Text="CYBER-ICE TACTICAL HUD // WORKSTATION NODE" Foreground="{DynamicResource CyanPrimaryBrush}" FontSize="9.5" FontWeight="SemiBold" Opacity="0.85"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Pill State Badge -->
+                    <Border x:Name="StateBadgeBorder" Grid.Column="1" Background="{DynamicResource BtnDefaultBgBrush}" BorderBrush="{DynamicResource CyanPrimaryBrush}"
+                            BorderThickness="1" CornerRadius="14" Padding="14,5" VerticalAlignment="Center" Margin="0,0,14,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse x:Name="StateLed" Width="8" Height="8" Fill="{DynamicResource CyanSecondaryBrush}" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="TxtSystemState" Text="IDLE" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="Bold" FontSize="11.5"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- AI Engine Status -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Background="{DynamicResource BgSubtlePillBrush}" BorderBrush="{DynamicResource CyanBorderDimBrush}" BorderThickness="1" CornerRadius="12" Padding="12,5">
+                            <TextBlock x:Name="TxtModelStatus" Text="Qwen 3.5 9B // CUDA ONLINE"
+                                       Foreground="{DynamicResource CyanSecondaryBrush}" VerticalAlignment="Center" FontSize="11.5" FontWeight="Bold"/>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Lumia 950 XL Link Pill -->
+                    <Border Grid.Column="3" Background="{DynamicResource BgSubtlePillBrush}" BorderBrush="{DynamicResource CyanBorderDimBrush}" BorderThickness="1"
+                            CornerRadius="12" Padding="12,5" VerticalAlignment="Center" Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse x:Name="LumiaLed" Width="8" Height="8" Fill="{DynamicResource TextMutedBrush}" Margin="0,0,7,0"/>
+                            <TextBlock x:Name="TxtLumiaStatus" Text="LUMIA: STANDBY" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Pairing PIN Pill -->
+                    <Border Grid.Column="4" Background="{DynamicResource BgSubtlePillBrush}" BorderBrush="{DynamicResource CyanBorderDimBrush}" BorderThickness="1"
+                            CornerRadius="12" Padding="12,5" VerticalAlignment="Center" Margin="0,0,10,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="PIN" Foreground="{DynamicResource TextMutedBrush}" FontSize="10.5" FontWeight="Bold" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtPairingPin" Text="------" Foreground="{DynamicResource CyanSecondaryBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="12.5" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Theme Switcher Button (Theme 1 Dark vs Theme 2 Transparent LCD White) -->
+                    <Button x:Name="BtnThemeSwitch" Grid.Column="5" Content="☀ LCD THEME" Width="116"
+                            Style="{StaticResource HoloButtonStyle}" Click="BtnThemeSwitch_Click" Margin="0,0,8,0"
+                            ToolTip="Switch between Dark Cyber-Ice and High-Contrast Transparent LCD White Mode (F10)"/>
+
+                    <!-- Mute Button -->
+                    <Button x:Name="BtnMasterMute" Grid.Column="6" Content="MIC ACTIVE" Width="114"
+                            Style="{StaticResource HoloSuccessButtonStyle}" Click="BtnMasterMute_Click" Margin="0,0,12,0"/>
+
+                    <!-- Custom Window Chrome Buttons (FullScreen + Min + Max + Close) -->
+                    <StackPanel Grid.Column="7" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="BtnFullScreen" Content="⛶" Style="{StaticResource WindowControlButtonStyle}" Click="BtnFullScreen_Click" ToolTip="Full Screen (F11)" Margin="0,0,2,0"/>
+                        <Button Content="─" Style="{StaticResource WindowControlButtonStyle}" Click="BtnMinimize_Click" ToolTip="Minimize"/>
+                        <Button x:Name="BtnMaximize" Content="☐" Style="{StaticResource WindowControlButtonStyle}" Click="BtnMaximize_Click" Margin="2,0" ToolTip="Maximize / Restore"/>
+                        <Button Content="✕" Style="{StaticResource WindowCloseButtonStyle}" Click="BtnClose_Click" ToolTip="Close"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ==================== LAYER 2: SECURITY CONFIRMATION OVERLAY BANNER ==================== -->
+            <Border x:Name="SecurityBanner" Visibility="Collapsed" VerticalAlignment="Top" HorizontalAlignment="Center"
+                    Width="760" Margin="0,84,0,0" Background="{DynamicResource BgPanelBrush}" BorderBrush="{DynamicResource AlertRedBrush}"
+                    BorderThickness="2" CornerRadius="12" Padding="18,14" Effect="{StaticResource CrimsonGlowEffect}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="⚠ TACTICAL SECURITY AUTHORIZATION REQUIRED" Foreground="{DynamicResource AlertRedBrush}" FontWeight="Bold" FontSize="13"/>
+                        <TextBlock x:Name="TxtPendingActionDetails" Text="Awaiting confirmation..."
+                                   Foreground="{DynamicResource TextPrimaryBrush}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="تایید (Approve)" Style="{StaticResource HoloSuccessButtonStyle}" Width="125" Margin="14,0,8,0" Click="BtnApproveAction_Click"/>
+                    <Button Grid.Column="2" Content="رد (Reject)" Style="{StaticResource HoloDangerButtonStyle}" Width="115" Click="BtnRejectAction_Click"/>
+                </Grid>
+            </Border>
+
+            <!-- ==================== LAYER 3: SLIDE-OUT GLASS DRAWERS & DOCK HANDLES ==================== -->
+
+            <!-- 3A. LEFT SLIDE-OUT DRAWER: SYSTEM TELEMETRY -->
+            <Border x:Name="LeftDrawer" Width="370" HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                    Margin="20,82,0,58" Background="{DynamicResource BgPanelBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                    CornerRadius="16" Padding="20" Effect="{StaticResource PanelShadowEffect}">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="LeftDrawerTransform" X="-410"/>
+                </Border.RenderTransform>
                 <StackPanel>
-                    <TextBlock Text="HARDWARE TELEMETRY"
-                               Foreground="{StaticResource CyanPrimaryBrush}"
-                               FontSize="14" FontWeight="Bold" Margin="0,0,0,4"/>
-                    <TextBlock Text="WORKSTATION SENSOR ARRAY // REAL-TIME"
-                               Foreground="{StaticResource TextMutedBrush}"
-                               FontSize="10" Margin="0,0,0,16"/>
+                    <DockPanel Margin="0,0,0,18">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="7" Height="7" Fill="{DynamicResource CyanSecondaryBrush}" Margin="0,0,8,0"/>
+                            <TextBlock Text="HARDWARE TELEMETRY" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="13.5" FontWeight="Bold"/>
+                        </StackPanel>
+                        <Button Content="✕" Style="{StaticResource WindowControlButtonStyle}" HorizontalAlignment="Right" Click="BtnToggleLeftDrawer_Click"/>
+                    </DockPanel>
 
-                    <!-- CPU Card: Ryzen 7 9700X -->
-                    <Border Background="{StaticResource BgCardBrush}" BorderBrush="#2600E5FF"
-                            BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,0,0,12">
+                    <!-- CPU Card -->
+                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="14" Margin="0,0,0,12">
                         <StackPanel>
-                            <DockPanel Margin="0,0,0,6">
-                                <TextBlock Text="CPU // AMD RYZEN 7 9700X" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="12"/>
-                                <TextBlock x:Name="TxtCpuPercent" Text="0.0%" Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" HorizontalAlignment="Right"/>
+                            <DockPanel Margin="0,0,0,8">
+                                <TextBlock Text="CPU // RYZEN 7 9700X" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="12"/>
+                                <TextBlock x:Name="TxtCpuPercent" Text="0.0%" Foreground="{DynamicResource CyanSecondaryBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="13" HorizontalAlignment="Right"/>
                             </DockPanel>
                             <ProgressBar x:Name="BarCpuLoad" Style="{StaticResource HoloProgressBarStyle}" Minimum="0" Maximum="100" Value="0"/>
                         </StackPanel>
                     </Border>
 
-                    <!-- GPU Card: RTX 3080 10GB -->
-                    <Border Background="{StaticResource BgCardBrush}" BorderBrush="#2600E5FF"
-                            BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,0,0,12">
+                    <!-- GPU Card -->
+                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="14" Margin="0,0,0,12">
                         <StackPanel>
-                            <DockPanel Margin="0,0,0,6">
-                                <TextBlock Text="GPU // NVIDIA RTX 3080" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="12"/>
-                                <TextBlock x:Name="TxtGpuPercent" Text="0.0% | 0°C" Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" HorizontalAlignment="Right"/>
+                            <DockPanel Margin="0,0,0,8">
+                                <TextBlock Text="GPU // RTX 3080 10GB" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="12"/>
+                                <TextBlock x:Name="TxtGpuPercent" Text="0.0% | 0°C" Foreground="{DynamicResource CyanSecondaryBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="13" HorizontalAlignment="Right"/>
                             </DockPanel>
-                            <ProgressBar x:Name="BarGpuLoad" Style="{StaticResource HoloProgressBarStyle}" Minimum="0" Maximum="100" Value="0" Margin="0,0,0,10"/>
+                            <ProgressBar x:Name="BarGpuLoad" Style="{StaticResource HoloProgressBarStyle}" Minimum="0" Maximum="100" Value="0" Margin="0,0,0,12"/>
 
                             <DockPanel Margin="0,0,0,6">
-                                <TextBlock Text="VRAM ALLOCATION" Foreground="{StaticResource TextMutedBrush}" FontSize="11"/>
-                                <TextBlock x:Name="TxtVramUsage" Text="0 / 10240 MB" Foreground="{StaticResource ActiveGreenBrush}" FontWeight="SemiBold" FontSize="11" HorizontalAlignment="Right"/>
+                                <TextBlock Text="VRAM MATRIX" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="TxtVramUsage" Text="0 / 10240 MB" Foreground="{DynamicResource CyanPrimaryBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="11.5" HorizontalAlignment="Right"/>
                             </DockPanel>
-                            <ProgressBar x:Name="BarVramUsage" Style="{StaticResource HoloProgressBarStyle}" Foreground="{StaticResource ActiveGreenBrush}" Minimum="0" Maximum="10240" Value="0"/>
+                            <ProgressBar x:Name="BarVramUsage" Style="{StaticResource HoloProgressBarStyle}" Minimum="0" Maximum="10240" Value="0"/>
                         </StackPanel>
                     </Border>
 
-                    <!-- RAM Card: 32GB DDR5 -->
-                    <Border Background="{StaticResource BgCardBrush}" BorderBrush="#2600E5FF"
-                            BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,0,0,14">
+                    <!-- RAM Card -->
+                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="14" Margin="0,0,0,12">
                         <StackPanel>
-                            <DockPanel Margin="0,0,0,6">
-                                <TextBlock Text="SYSTEM MEMORY // DDR5-6400" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="12"/>
-                                <TextBlock x:Name="TxtRamUsage" Text="0.0 / 32.0 GB" Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" HorizontalAlignment="Right"/>
+                            <DockPanel Margin="0,0,0,8">
+                                <TextBlock Text="MEMORY // 32GB DDR5-6400" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="12"/>
+                                <TextBlock x:Name="TxtRamUsage" Text="0.0 / 32.0 GB" Foreground="{DynamicResource CyanSecondaryBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="12.5" HorizontalAlignment="Right"/>
                             </DockPanel>
                             <ProgressBar x:Name="BarRamUsage" Style="{StaticResource HoloProgressBarStyle}" Minimum="0" Maximum="32" Value="0"/>
                         </StackPanel>
                     </Border>
 
-                    <!-- Audio Routing & Network Status -->
-                    <Border Background="{StaticResource BgCardBrush}" BorderBrush="#2600E5FF"
-                            BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,0,0,14">
+                    <!-- Audio & Link Routing Card -->
+                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="14" Margin="0,0,0,16">
                         <StackPanel>
-                            <TextBlock Text="AUDIO &amp; LINK ROUTING" Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" FontSize="12" Margin="0,0,0,8"/>
-                            <DockPanel Margin="0,0,0,5">
-                                <TextBlock Text="Active Microphone:" Foreground="{StaticResource TextMutedBrush}" FontSize="12"/>
-                                <TextBlock x:Name="TxtActiveMic" Text="LOCAL PC MIC" Foreground="{StaticResource ActiveGreenBrush}" FontWeight="Bold" FontSize="12" HorizontalAlignment="Right"/>
+                            <DockPanel Margin="0,0,0,8">
+                                <TextBlock Text="Active Audio Feed" Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5"/>
+                                <TextBlock x:Name="TxtActiveMic" Text="LOCAL PC MIC" Foreground="{DynamicResource CyanSecondaryBrush}" FontWeight="Bold" FontSize="11.5" HorizontalAlignment="Right"/>
                             </DockPanel>
-                            <DockPanel Margin="0,0,0,5">
-                                <TextBlock Text="WebSocket Stream:" Foreground="{StaticResource TextMutedBrush}" FontSize="12"/>
-                                <TextBlock x:Name="TxtWsLink" Text="CONNECTING..." Foreground="{StaticResource WarningAmberBrush}" FontWeight="Bold" FontSize="12" HorizontalAlignment="Right"/>
+                            <DockPanel Margin="0,0,0,8">
+                                <TextBlock Text="Vocal Energy (RMS)" Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5"/>
+                                <TextBlock x:Name="TxtRmsValue" Text="0.000" Foreground="{DynamicResource CyanPrimaryBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="12" HorizontalAlignment="Right"/>
                             </DockPanel>
                             <DockPanel>
-                                <TextBlock Text="Endpoint Port:" Foreground="{StaticResource TextMutedBrush}" FontSize="12"/>
-                                <TextBlock Text="127.0.0.1:8765" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12" HorizontalAlignment="Right"/>
+                                <TextBlock Text="Neural WebSocket" Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5"/>
+                                <TextBlock x:Name="TxtWsLink" Text="CONNECTING..." Foreground="{DynamicResource WarningAmberBrush}" FontWeight="Bold" FontSize="11.5" HorizontalAlignment="Right"/>
                             </DockPanel>
                         </StackPanel>
                     </Border>
 
-                    <!-- Quick Controls -->
-                    <TextBlock Text="DIRECT OVERRIDE CONTROLS" Foreground="{StaticResource TextMutedBrush}" FontSize="10" Margin="0,4,0,8"/>
-                    <Button x:Name="BtnWakeTrigger" Content="WAKE TRIGGER (HEY JARVIS)"
-                            Style="{StaticResource HoloButtonStyle}" Margin="0,0,0,8"
-                            Click="BtnWakeTrigger_Click"/>
-                    <Button x:Name="BtnRefreshTelemetry" Content="FORCE TELEMETRY SYNC"
-                            Style="{StaticResource HoloButtonStyle}"
-                            Click="BtnRefreshTelemetry_Click"/>
+                    <Button Content="⚡  WAKE TRIGGER (CELESTE)" Style="{StaticResource HoloSuccessButtonStyle}" Margin="0,0,0,8" Click="BtnWakeTrigger_Click"/>
+                    <Button Content="↻  SYNC TELEMETRY SENSORS" Style="{StaticResource HoloButtonStyle}" Click="BtnRefreshTelemetry_Click"/>
                 </StackPanel>
             </Border>
 
-            <!-- ========== CENTER PANEL: ARC REACTOR HUD + PERSIAN CHAT ========== -->
-            <Grid Grid.Column="1" Margin="0,0,12,0">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="295"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+            <!-- Left Edge Floating Pill Handle -->
+            <Button x:Name="BtnLeftHandle" Content="❯   TELEMETRY" HorizontalAlignment="Left" VerticalAlignment="Center"
+                    Margin="20,0,0,0" Style="{StaticResource HoloButtonStyle}" Padding="14,12"
+                    Click="BtnToggleLeftDrawer_Click"/>
 
-                <!-- Top Center: Animated Concentric Arc Reactor & Live RMS Visualizer -->
-                <Border Grid.Row="0" Background="{StaticResource BgPanelBrush}"
-                        BorderBrush="#3300E5FF" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,10">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="250"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
+            <!-- 3B. RIGHT SLIDE-OUT DRAWER: 4 MANAGEMENT TABS -->
+            <Border x:Name="RightDrawer" Width="500" HorizontalAlignment="Right" VerticalAlignment="Stretch"
+                    Margin="0,82,20,58" Background="{DynamicResource BgPanelBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                    CornerRadius="16" Padding="18" Effect="{StaticResource PanelShadowEffect}">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="RightDrawerTransform" X="540"/>
+                </Border.RenderTransform>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
 
-                        <!-- Concentric Arc Reactor Canvas -->
-                        <Canvas Grid.Column="0" Width="230" Height="230" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <!-- Outer Static Ring -->
-                            <Ellipse Width="220" Height="220" Canvas.Left="5" Canvas.Top="5"
-                                     Stroke="#2200E5FF" StrokeThickness="2"/>
-
-                            <!-- Rotating Outer Segmented Ring -->
-                            <Ellipse x:Name="RingOuter" Width="200" Height="200" Canvas.Left="15" Canvas.Top="15"
-                                     Stroke="{StaticResource CyanPrimaryBrush}" StrokeThickness="4"
-                                     StrokeDashArray="10 5 3 5" RenderTransformOrigin="0.5,0.5">
-                                <Ellipse.RenderTransform>
-                                    <RotateTransform x:Name="OuterRingRotate" Angle="0"/>
-                                </Ellipse.RenderTransform>
-                            </Ellipse>
-
-                            <!-- Counter-Rotating Middle Ring -->
-                            <Ellipse x:Name="RingMiddle" Width="156" Height="156" Canvas.Left="37" Canvas.Top="37"
-                                     Stroke="{StaticResource CyanSecondaryBrush}" StrokeThickness="5"
-                                     StrokeDashArray="6 4 2 4" RenderTransformOrigin="0.5,0.5">
-                                <Ellipse.RenderTransform>
-                                    <RotateTransform x:Name="MidRingRotate" Angle="0"/>
-                                </Ellipse.RenderTransform>
-                            </Ellipse>
-
-                            <!-- Fast Inner Ring -->
-                            <Ellipse x:Name="RingInner" Width="112" Height="112" Canvas.Left="59" Canvas.Top="59"
-                                     Stroke="{StaticResource ActiveGreenBrush}" StrokeThickness="3"
-                                     StrokeDashArray="4 3" RenderTransformOrigin="0.5,0.5">
-                                <Ellipse.RenderTransform>
-                                    <RotateTransform x:Name="InnerRingRotate" Angle="0"/>
-                                </Ellipse.RenderTransform>
-                            </Ellipse>
-
-                            <!-- Reactor Core Glow -->
-                            <Ellipse x:Name="ReactorCore" Width="68" Height="68" Canvas.Left="81" Canvas.Top="81"
-                                     Fill="#3300E5FF" Stroke="{StaticResource CyanPrimaryBrush}" StrokeThickness="2"/>
-
-                            <TextBlock x:Name="TxtReactorCenter" Text="MARK VII"
-                                       Canvas.Left="86" Canvas.Top="106"
-                                       Foreground="{StaticResource TextPrimaryBrush}"
-                                       FontSize="12" FontWeight="Bold"/>
-                        </Canvas>
-
-                        <!-- Right of Reactor: Live Audio RMS Waveform & State Telemetry -->
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,6,0">
-                            <TextBlock Text="ARC REACTOR CORE // AUDIO &amp; NEURAL FEED"
-                                       Foreground="{StaticResource CyanPrimaryBrush}"
-                                       FontSize="14" FontWeight="Bold" Margin="0,0,0,4"/>
-                            <TextBlock x:Name="TxtReactorSubtitle"
-                                       Text="State: IDLE | Waiting for 'Hey Jarvis' wake word or command input..."
-                                       Foreground="{StaticResource TextMutedBrush}"
-                                       FontSize="12" TextWrapping="Wrap" Margin="0,0,0,14"/>
-
-                            <DockPanel Margin="0,0,0,6">
-                                <TextBlock Text="LIVE AUDIO RMS LEVEL" Foreground="{StaticResource TextMutedBrush}" FontSize="11"/>
-                                <TextBlock x:Name="TxtRmsValue" Text="0.000" Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" FontSize="12" HorizontalAlignment="Right"/>
-                            </DockPanel>
-                            <ProgressBar x:Name="BarRmsLevel" Style="{StaticResource HoloProgressBarStyle}"
-                                         Height="12" Minimum="0" Maximum="1.0" Value="0" Margin="0,0,0,14"/>
-
-                            <!-- 16-Bar Dynamic Waveform Visualizer -->
-                            <UniformGrid x:Name="WaveformGrid" Columns="16" Height="56" VerticalAlignment="Bottom" Margin="0,0,0,6">
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="8" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="14" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="22" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="18" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="30" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="25" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="40" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="35" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="35" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="40" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="25" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="30" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="18" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="22" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="14" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                                <ProgressBar Orientation="Vertical" Minimum="0" Maximum="100" Value="8" Margin="2,0" Background="#06101E" Foreground="{StaticResource CyanPrimaryBrush}" BorderThickness="0"/>
-                            </UniformGrid>
+                    <DockPanel Grid.Row="0" Margin="2,0,2,14">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="7" Height="7" Fill="{DynamicResource CyanSecondaryBrush}" Margin="0,0,8,0"/>
+                            <TextBlock Text="C.E.L.E.S.T.E. CONTROL DECK" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="13.5" FontWeight="Bold"/>
                         </StackPanel>
-                    </Grid>
-                </Border>
+                        <Button Content="✕" Style="{StaticResource WindowControlButtonStyle}" HorizontalAlignment="Right" Click="BtnToggleRightDrawer_Click"/>
+                    </DockPanel>
 
-                <!-- Middle Center: Prominent Security Confirmation Banner (Shown when PendingConfirmations > 0) -->
-                <Border x:Name="SecurityBanner" Grid.Row="1" Visibility="Collapsed"
-                        Background="#28FF3366" BorderBrush="{StaticResource AlertRedBrush}"
-                        BorderThickness="2" CornerRadius="6" Padding="14,10" Margin="0,0,0,10">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                            <TextBlock Text="⚠ SENSITIVE SECURITY ACTION REQUIRES CONFIRMATION"
-                                       Foreground="{StaticResource AlertRedBrush}" FontWeight="Bold" FontSize="13"/>
-                            <TextBlock x:Name="TxtPendingActionDetails"
-                                       Text="Command awaiting operator authorization..."
-                                       Foreground="{StaticResource TextPrimaryBrush}" FontSize="12" Margin="0,3,0,0"
-                                       TextWrapping="Wrap"/>
+                    <TabControl Grid.Row="1">
+                        <!-- TAB 1: CYBER-ICE VOCAL DSP -->
+                        <TabItem Header="VOCAL DSP">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,8,4,4">
+                                <StackPanel>
+                                    <TextBlock Text="CYBER-ICE VOCAL CHAIN (DSP)" Foreground="{DynamicResource CyanSecondaryBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,4"/>
+                                    <TextBlock Text="Rate 1.06x  •  HPF 95Hz  •  +2.5dB @ 3.5kHz  •  Studio Reverb"
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,14"/>
+
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,10">
+                                        <StackPanel>
+                                            <DockPanel Margin="0,0,0,8">
+                                                <TextBlock Text="Pitch Shift (Semitones)" FontWeight="SemiBold" FontSize="12"/>
+                                                <TextBlock x:Name="LblPitchVal" Text="-0.3" Foreground="{DynamicResource CyanSecondaryBrush}" FontFamily="Consolas" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                            </DockPanel>
+                                            <Slider x:Name="SldPitch" Minimum="-4.0" Maximum="2.0" Value="-0.3" TickFrequency="0.1" IsSnapToTickEnabled="True" ValueChanged="VoiceSlider_ValueChanged"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,10">
+                                        <StackPanel>
+                                            <DockPanel Margin="0,0,0,8">
+                                                <TextBlock Text="Crystal Presence &amp; Air Mix" FontWeight="SemiBold" FontSize="12"/>
+                                                <TextBlock x:Name="LblMetallicVal" Text="0.10" Foreground="{DynamicResource CyanSecondaryBrush}" FontFamily="Consolas" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                            </DockPanel>
+                                            <Slider x:Name="SldMetallic" Minimum="0.0" Maximum="0.50" Value="0.10" TickFrequency="0.02" IsSnapToTickEnabled="True" ValueChanged="VoiceSlider_ValueChanged"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,10">
+                                        <StackPanel>
+                                            <DockPanel Margin="0,0,0,8">
+                                                <TextBlock Text="Tight Studio Room Reverb (8%-12%)" FontWeight="SemiBold" FontSize="12"/>
+                                                <TextBlock x:Name="LblReverbVal" Text="0.10" Foreground="{DynamicResource CyanSecondaryBrush}" FontFamily="Consolas" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                            </DockPanel>
+                                            <Slider x:Name="SldReverb" Minimum="0.0" Maximum="0.50" Value="0.10" TickFrequency="0.02" IsSnapToTickEnabled="True" ValueChanged="VoiceSlider_ValueChanged"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,16">
+                                        <StackPanel>
+                                            <DockPanel Margin="0,0,0,8">
+                                                <TextBlock Text="Wake-Word Sensitivity" FontWeight="SemiBold" FontSize="12"/>
+                                                <TextBlock x:Name="LblWakeVal" Text="0.50" Foreground="{DynamicResource CyanPrimaryBrush}" FontFamily="Consolas" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                            </DockPanel>
+                                            <Slider x:Name="SldWakeThreshold" Minimum="0.15" Maximum="0.90" Value="0.50" TickFrequency="0.05" IsSnapToTickEnabled="True" ValueChanged="VoiceSlider_ValueChanged"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Button Content="APPLY CYBER-ICE VOCAL PROFILE" Style="{StaticResource HoloButtonStyle}" Margin="0,0,0,8" Click="BtnApplyVoiceConfig_Click"/>
+                                    <Button Content="🔊  TEST CELESTE VOICE SYNTHESIS" Style="{StaticResource HoloSuccessButtonStyle}" Click="BtnTestVoice_Click"/>
+                                    <TextBlock x:Name="TxtVoiceConfigResult" Text="" Foreground="{DynamicResource CyanSecondaryBrush}" FontSize="11.5" Margin="0,10,0,0"/>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
+
+                        <!-- TAB 2: MEMORY & FACTS -->
+                        <TabItem Header="MEMORY">
+                            <Grid Margin="4,8,4,4">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                                    <TextBlock Text="PERSISTENT FACTS MATRIX (SQLite)" Foreground="{DynamicResource CyanSecondaryBrush}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
+                                    <Button Content="↻ REFRESH" Style="{StaticResource HoloButtonStyle}" HorizontalAlignment="Right" Padding="12,4" Click="BtnRefreshFacts_Click"/>
+                                </DockPanel>
+
+                                <DataGrid x:Name="GridFacts" Grid.Row="1" AutoGenerateColumns="False" Margin="0,0,0,10">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="42"/>
+                                        <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="75"/>
+                                        <DataGridTextColumn Header="Key" Binding="{Binding Key}" Width="105"/>
+                                        <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*"/>
+                                        <DataGridTextColumn Header="Imp" Binding="{Binding Importance}" Width="45"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+
+                                <Border Grid.Row="2" Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="55"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="TxtFactCategory" Grid.Column="0" Style="{StaticResource HoloTextBoxStyle}" Text="user" Margin="0,0,6,0" ToolTip="Category"/>
+                                            <TextBox x:Name="TxtFactKey" Grid.Column="1" Style="{StaticResource HoloTextBoxStyle}" Text="" Margin="0,0,6,0" ToolTip="Fact Key"/>
+                                            <TextBox x:Name="TxtFactImportance" Grid.Column="2" Style="{StaticResource HoloTextBoxStyle}" Text="5" ToolTip="Importance (1-10)"/>
+                                        </Grid>
+                                        <TextBox x:Name="TxtFactValue" Style="{StaticResource HoloTextBoxStyle}" FlowDirection="RightToLeft" Margin="0,0,0,8" ToolTip="Fact Value"/>
+                                        <Button Content="＋  SAVE FACT TO MEMORY" Style="{StaticResource HoloSuccessButtonStyle}" Click="BtnAddFact_Click"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Grid Grid.Row="3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" Content="DELETE FACT" Style="{StaticResource HoloDangerButtonStyle}" Margin="0,0,5,0" Click="BtnDeleteFact_Click"/>
+                                    <Button Grid.Column="1" Content="CLEAR HISTORY" Style="{StaticResource HoloDangerButtonStyle}" Margin="5,0,0,0" Click="BtnClearHistory_Click"/>
+                                </Grid>
+                            </Grid>
+                        </TabItem>
+
+                        <!-- TAB 3: SECURITY & STARTUP -->
+                        <TabItem Header="SECURITY">
+                            <Grid Margin="4,8,4,4">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <Border Grid.Row="0" Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,10">
+                                    <DockPanel>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="WINDOWS LOGON AUTO-START" Foreground="{DynamicResource CyanSecondaryBrush}" FontWeight="Bold" FontSize="12"/>
+                                            <TextBlock x:Name="TxtStartupState" Text="Checking registry..." Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,3,0,0"/>
+                                        </StackPanel>
+                                        <Button x:Name="BtnToggleStartup" Content="ENABLE" Style="{StaticResource HoloButtonStyle}" HorizontalAlignment="Right" Width="115" Click="BtnToggleStartup_Click"/>
+                                    </DockPanel>
+                                </Border>
+
+                                <Border Grid.Row="1" Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,12">
+                                    <StackPanel>
+                                        <DockPanel Margin="0,0,0,8">
+                                            <TextBlock Text="SUBSYSTEM DIAGNOSTICS" Foreground="{DynamicResource CyanSecondaryBrush}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
+                                            <Button Content="RUN CHECK" Style="{StaticResource HoloSuccessButtonStyle}" HorizontalAlignment="Right" Padding="12,4" Click="BtnRunDiagnostics_Click"/>
+                                        </DockPanel>
+                                        <TextBlock x:Name="TxtDiagnosticsOutput" Text="Ready to verify C.E.L.E.S.T.E. subsystems." Foreground="{DynamicResource TextPrimaryBrush}" FontFamily="Consolas" FontSize="11.5" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <DockPanel Grid.Row="2" Margin="0,0,0,8">
+                                    <TextBlock Text="SECURITY AUDIT LOG" Foreground="{DynamicResource CyanPrimaryBrush}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
+                                    <Button Content="↻ REFRESH" Style="{StaticResource HoloButtonStyle}" HorizontalAlignment="Right" Padding="12,4" Click="BtnRefreshAudit_Click"/>
+                                </DockPanel>
+
+                                <DataGrid x:Name="GridSecurityAudit" Grid.Row="3" AutoGenerateColumns="False">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="40"/>
+                                        <DataGridTextColumn Header="Command" Binding="{Binding CommandType}" Width="115"/>
+                                        <DataGridTextColumn Header="Risk" Binding="{Binding RiskLevel}" Width="75"/>
+                                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="80"/>
+                                        <DataGridTextColumn Header="Timestamp" Binding="{Binding Timestamp}" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </TabItem>
+
+                        <!-- TAB 4: LIVE LOGS -->
+                        <TabItem Header="LOGS">
+                            <Grid Margin="4,8,4,4">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                                    <ComboBox x:Name="CmbLogSeverity" Width="125" SelectedIndex="0" SelectionChanged="CmbLogSeverity_SelectionChanged">
+                                        <ComboBoxItem Content="ALL"/>
+                                        <ComboBoxItem Content="INFO"/>
+                                        <ComboBoxItem Content="WARNING"/>
+                                        <ComboBoxItem Content="ERROR"/>
+                                    </ComboBox>
+                                    <Button Content="↻ REFRESH LOGS" Style="{StaticResource HoloButtonStyle}" HorizontalAlignment="Right" Padding="12,5" Click="BtnRefreshLogs_Click"/>
+                                </DockPanel>
+                                <Border Grid.Row="1" Background="{DynamicResource GridBgBrush}" BorderBrush="{DynamicResource CyanBorderDimBrush}" BorderThickness="1" CornerRadius="10" Padding="6">
+                                    <ListBox x:Name="LstLogs" Background="Transparent" BorderThickness="0"
+                                             Foreground="{DynamicResource TextPrimaryBrush}" FontFamily="Consolas" FontSize="11"/>
+                                </Border>
+                            </Grid>
+                        </TabItem>
+                    </TabControl>
+                </Grid>
+            </Border>
+
+            <!-- Right Edge Floating Pill Handle -->
+            <Button x:Name="BtnRightHandle" Content="CONTROL DECK   ❮" HorizontalAlignment="Right" VerticalAlignment="Center"
+                    Margin="0,0,20,0" Style="{StaticResource HoloButtonStyle}" Padding="14,12"
+                    Click="BtnToggleRightDrawer_Click"/>
+
+            <!-- 3C. BOTTOM SLIDE-OUT DRAWER: PERSIAN DIALOGUE & COMMAND INPUT -->
+            <Border x:Name="BottomDrawer" Height="370" VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                    Width="1040" Margin="0,0,0,14" Background="{DynamicResource BgPanelBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                    CornerRadius="18" Padding="20,16" Effect="{StaticResource PanelShadowEffect}">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="BottomDrawerTransform" Y="400"/>
+                </Border.RenderTransform>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="8" Height="8" Fill="{DynamicResource CyanSecondaryBrush}" Margin="0,0,10,0"/>
+                            <TextBlock Text="C.E.L.E.S.T.E. DIALOGUE STREAM  //  ترمینال گفتگوی تاکتیکی"
+                                       Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="Bold" FontSize="13"/>
                         </StackPanel>
-                        <Button x:Name="BtnApproveAction" Grid.Column="1" Content="تایید (Approve)"
-                                Style="{StaticResource HoloSuccessButtonStyle}" Width="125" Margin="10,0,8,0"
-                                Click="BtnApproveAction_Click"/>
-                        <Button x:Name="BtnRejectAction" Grid.Column="2" Content="رد (Reject)"
-                                Style="{StaticResource HoloDangerButtonStyle}" Width="115"
-                                Click="BtnRejectAction_Click"/>
-                    </Grid>
-                </Border>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Border Background="{DynamicResource BgSubtlePillBrush}" BorderBrush="{DynamicResource CyanBorderDimBrush}" BorderThickness="1" CornerRadius="10" Padding="10,3" Margin="0,0,10,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtChatStatus" Text="ONLINE" Foreground="{DynamicResource CyanSecondaryBrush}" FontSize="10.5" FontWeight="Bold"/>
+                            </Border>
+                            <Button Content="▼  HIDE" Style="{StaticResource HoloButtonStyle}" Padding="12,4" Click="BtnToggleBottomDrawer_Click"/>
+                        </StackPanel>
+                    </DockPanel>
 
-                <!-- Bottom Center: RTL Persian Conversation History + Input Box -->
-                <Border Grid.Row="2" Background="{StaticResource BgPanelBrush}"
-                        BorderBrush="#3300E5FF" BorderThickness="1" CornerRadius="6" Padding="14">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-
-                        <DockPanel Grid.Row="0" Margin="0,0,0,8">
-                            <TextBlock Text="DIALOGUE STREAM // تاریخچه گفتگوی جارویس"
-                                       Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" FontSize="13"/>
-                            <TextBlock x:Name="TxtChatStatus" Text="RTL PERSIAN READY"
-                                       Foreground="{StaticResource TextMutedBrush}" FontSize="11" HorizontalAlignment="Right"/>
-                        </DockPanel>
-
-                        <ListBox x:Name="LstConversation" Grid.Row="1"
-                                 Background="#06101E" BorderBrush="#2600E5FF" BorderThickness="1"
-                                 Foreground="{StaticResource TextPrimaryBrush}"
-                                 FlowDirection="RightToLeft" FontSize="13" Padding="8"
+                    <Border Grid.Row="1" Background="{DynamicResource GridBgBrush}" BorderBrush="{DynamicResource CyanBorderDimBrush}" BorderThickness="1" CornerRadius="12" Padding="8">
+                        <ListBox x:Name="LstConversation" Background="Transparent" BorderThickness="0"
+                                 Foreground="{DynamicResource TextPrimaryBrush}" FlowDirection="RightToLeft" FontSize="13"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Background="#0B1B32" BorderBrush="#2200E5FF" BorderThickness="1"
-                                            CornerRadius="5" Padding="10,7" Margin="0,0,0,6">
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource CyanPrimaryBrush}" BorderThickness="0,0,3,0" CornerRadius="10" Padding="14,9" Margin="2,0,2,8">
                                         <StackPanel>
-                                            <DockPanel Margin="0,0,0,3">
-                                                <TextBlock Text="{Binding SenderLabel}" Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" FontSize="11"/>
-                                                <TextBlock Text="{Binding Timestamp}" Foreground="{StaticResource TextMutedBrush}" FontSize="10" HorizontalAlignment="Left"/>
+                                            <DockPanel Margin="0,0,0,4">
+                                                <TextBlock Text="{Binding SenderLabel}" Foreground="{DynamicResource CyanSecondaryBrush}" FontWeight="Bold" FontSize="11.5"/>
+                                                <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas" FontSize="10.5" HorizontalAlignment="Left"/>
                                             </DockPanel>
-                                            <TextBlock Text="{Binding Content}" Foreground="{StaticResource TextPrimaryBrush}"
-                                                       TextWrapping="Wrap" FontSize="13"/>
+                                            <TextBlock Text="{Binding Content}" Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap" FontSize="13.5" LineHeight="21"/>
                                         </StackPanel>
                                     </Border>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
+                    </Border>
 
-                        <Grid Grid.Row="2" Margin="0,10,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="120"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TxtChatInput" Grid.Column="0"
-                                     Style="{StaticResource HoloTextBoxStyle}"
-                                     FlowDirection="RightToLeft" FontSize="13"
-                                     KeyDown="TxtChatInput_KeyDown"/>
-                            <Button x:Name="BtnSendChat" Grid.Column="1" Content="ارسال (SEND)"
-                                    Style="{StaticResource HoloButtonStyle}" Margin="8,0,0,0"
-                                    Click="BtnSendChat_Click"/>
-                        </Grid>
+                    <Grid Grid.Row="2" Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="140"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="TxtChatInput" Grid.Column="0" Style="{StaticResource HoloTextBoxStyle}"
+                                 FlowDirection="RightToLeft" FontSize="13.5" KeyDown="TxtChatInput_KeyDown"/>
+                        <Button Grid.Column="1" Content="ارسال فرمان  ➤" Style="{StaticResource HoloSuccessButtonStyle}" Margin="10,0,0,0" Click="BtnSendChat_Click"/>
                     </Grid>
+                </Grid>
+            </Border>
+
+            <!-- Bottom Edge Floating Dock + Status Ticker -->
+            <Grid x:Name="BottomDockBar" VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Margin="24,0,24,16" IsHitTestVisible="True">
+                <Border Background="{DynamicResource BgDockPillBrush}" BorderBrush="{DynamicResource CyanBorderDimBrush}" BorderThickness="1" CornerRadius="10" Padding="12,5" HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtStatusBar" Text="C.E.L.E.S.T.E. Cyber-Ice Core Initialized"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" FontWeight="SemiBold"/>
+                </Border>
+
+                <Button x:Name="BtnBottomHandle" Content="▲   DIALOGUE &amp; COMMAND TERMINAL"
+                        HorizontalAlignment="Center" Style="{StaticResource HoloButtonStyle}" Padding="24,8"
+                        Click="BtnToggleBottomDrawer_Click"/>
+
+                <Border Background="{DynamicResource BgDockPillBrush}" BorderBrush="{DynamicResource CyanBorderDimBrush}" BorderThickness="1" CornerRadius="10" Padding="12,5" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtClock" Text="00:00:00" Foreground="{DynamicResource CyanSecondaryBrush}"
+                               FontFamily="Consolas" FontWeight="Bold" FontSize="12.5"/>
                 </Border>
             </Grid>
-
-            <!-- ========== RIGHT PANEL: STAGE 7.3 MANAGEMENT TABS ========== -->
-            <TabControl Grid.Column="2">
-                <!-- TAB 1: VOICE & WAKE-WORD CONFIG -->
-                <TabItem Header="VOICE &amp; DSP">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14">
-                        <StackPanel>
-                            <TextBlock Text="JARVIS VOICE &amp; DSP SYNTHESIS"
-                                       Foreground="{StaticResource CyanPrimaryBrush}" FontSize="14" FontWeight="Bold" Margin="0,0,0,4"/>
-                            <TextBlock Text="Adjust real-time metallic DSP filter and openWakeWord sensitivity"
-                                       Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="0,0,0,16"/>
-
-                            <!-- Pitch Semitones -->
-                            <Border Background="{StaticResource BgCardBrush}" BorderBrush="#2600E5FF" BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,0,0,12">
-                                <StackPanel>
-                                    <DockPanel Margin="0,0,0,6">
-                                        <TextBlock Text="Pitch Shift (Semitones)" FontWeight="SemiBold"/>
-                                        <TextBlock x:Name="LblPitchVal" Text="-2.5" Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" HorizontalAlignment="Right"/>
-                                    </DockPanel>
-                                    <Slider x:Name="SldPitch" Minimum="-6.0" Maximum="4.0" Value="-2.5" TickFrequency="0.5" IsSnapToTickEnabled="True" ValueChanged="VoiceSlider_ValueChanged"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Metallic Mix -->
-                            <Border Background="{StaticResource BgCardBrush}" BorderBrush="#2600E5FF" BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,0,0,12">
-                                <StackPanel>
-                                    <DockPanel Margin="0,0,0,6">
-                                        <TextBlock Text="Metallic Comb Filter Mix" FontWeight="SemiBold"/>
-                                        <TextBlock x:Name="LblMetallicVal" Text="0.22" Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" HorizontalAlignment="Right"/>
-                                    </DockPanel>
-                                    <Slider x:Name="SldMetallic" Minimum="0.0" Maximum="0.80" Value="0.22" TickFrequency="0.02" IsSnapToTickEnabled="True" ValueChanged="VoiceSlider_ValueChanged"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Reverb Decay -->
-                            <Border Background="{StaticResource BgCardBrush}" BorderBrush="#2600E5FF" BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,0,0,12">
-                                <StackPanel>
-                                    <DockPanel Margin="0,0,0,6">
-                                        <TextBlock Text="Holographic Reverb Decay" FontWeight="SemiBold"/>
-                                        <TextBlock x:Name="LblReverbVal" Text="0.18" Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" HorizontalAlignment="Right"/>
-                                    </DockPanel>
-                                    <Slider x:Name="SldReverb" Minimum="0.0" Maximum="0.70" Value="0.18" TickFrequency="0.02" IsSnapToTickEnabled="True" ValueChanged="VoiceSlider_ValueChanged"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Wake-Word Threshold -->
-                            <Border Background="{StaticResource BgCardBrush}" BorderBrush="#2600E5FF" BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,0,0,16">
-                                <StackPanel>
-                                    <DockPanel Margin="0,0,0,6">
-                                        <TextBlock Text="Wake-Word Threshold ('Hey Jarvis')" FontWeight="SemiBold"/>
-                                        <TextBlock x:Name="LblWakeVal" Text="0.50" Foreground="{StaticResource ActiveGreenBrush}" FontWeight="Bold" HorizontalAlignment="Right"/>
-                                    </DockPanel>
-                                    <Slider x:Name="SldWakeThreshold" Minimum="0.15" Maximum="0.90" Value="0.50" TickFrequency="0.05" IsSnapToTickEnabled="True" ValueChanged="VoiceSlider_ValueChanged"/>
-                                </StackPanel>
-                            </Border>
-
-                            <Button x:Name="BtnApplyVoiceConfig" Content="APPLY VOICE &amp; DSP CONFIGURATION"
-                                    Style="{StaticResource HoloButtonStyle}" Margin="0,0,0,10"
-                                    Click="BtnApplyVoiceConfig_Click"/>
-                            <Button x:Name="BtnTestVoice" Content="TEST PERSIAN TTS SYNTHESIS"
-                                    Style="{StaticResource HoloSuccessButtonStyle}"
-                                    Click="BtnTestVoice_Click"/>
-                            <TextBlock x:Name="TxtVoiceConfigResult" Text=""
-                                       Foreground="{StaticResource ActiveGreenBrush}" FontSize="11" Margin="0,10,0,0"/>
-                        </StackPanel>
-                    </ScrollViewer>
-                </TabItem>
-
-                <!-- TAB 2: MEMORY MANAGEMENT -->
-                <TabItem Header="MEMORY &amp; FACTS">
-                    <Grid Margin="12">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-
-                        <DockPanel Grid.Row="0" Margin="0,0,0,8">
-                            <TextBlock Text="LONG-TERM USER FACTS (SQLite)"
-                                       Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"/>
-                            <Button Content="REFRESH" Style="{StaticResource HoloButtonStyle}"
-                                    HorizontalAlignment="Right" Padding="10,4" Click="BtnRefreshFacts_Click"/>
-                        </DockPanel>
-
-                        <DataGrid x:Name="GridFacts" Grid.Row="1" AutoGenerateColumns="False" Margin="0,0,0,10">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="42"/>
-                                <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="75"/>
-                                <DataGridTextColumn Header="Key" Binding="{Binding Key}" Width="105"/>
-                                <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*"/>
-                                <DataGridTextColumn Header="Imp" Binding="{Binding Importance}" Width="42"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
-
-                        <!-- Add Fact Form -->
-                        <Border Grid.Row="2" Background="{StaticResource BgCardBrush}" BorderBrush="#2600E5FF"
-                                BorderThickness="1" CornerRadius="5" Padding="10" Margin="0,0,0,10">
-                            <StackPanel>
-                                <TextBlock Text="ADD / UPDATE USER FACT" Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" FontSize="11" Margin="0,0,0,6"/>
-                                <Grid Margin="0,0,0,6">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="95"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="60"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBox x:Name="TxtFactCategory" Grid.Column="0" Style="{StaticResource HoloTextBoxStyle}" Text="user" ToolTip="Category" Margin="0,0,6,0"/>
-                                    <TextBox x:Name="TxtFactKey" Grid.Column="1" Style="{StaticResource HoloTextBoxStyle}" Text="" ToolTip="Fact Key (e.g. profession)" Margin="0,0,6,0"/>
-                                    <TextBox x:Name="TxtFactImportance" Grid.Column="2" Style="{StaticResource HoloTextBoxStyle}" Text="5" ToolTip="Importance (1-10)"/>
-                                </Grid>
-                                <TextBox x:Name="TxtFactValue" Style="{StaticResource HoloTextBoxStyle}" FlowDirection="RightToLeft" Margin="0,0,0,8" ToolTip="Fact Value"/>
-                                <Button Content="SAVE FACT TO MEMORY" Style="{StaticResource HoloSuccessButtonStyle}" Click="BtnAddFact_Click"/>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Delete Fact / Clear History Buttons -->
-                        <Grid Grid.Row="3">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Button Grid.Column="0" Content="DELETE SELECTED FACT"
-                                    Style="{StaticResource HoloDangerButtonStyle}" Margin="0,0,5,0"
-                                    Click="BtnDeleteFact_Click"/>
-                            <Button Grid.Column="1" Content="CLEAR CHAT HISTORY"
-                                    Style="{StaticResource HoloDangerButtonStyle}" Margin="5,0,0,0"
-                                    Click="BtnClearHistory_Click"/>
-                        </Grid>
-                    </Grid>
-                </TabItem>
-
-                <!-- TAB 3: SECURITY & STARTUP -->
-                <TabItem Header="SECURITY &amp; STARTUP">
-                    <Grid Margin="12">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-
-                        <!-- Windows Startup Toggle Card -->
-                        <Border Grid.Row="0" Background="{StaticResource BgCardBrush}" BorderBrush="#2600E5FF"
-                                BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,0,0,10">
-                            <DockPanel>
-                                <StackPanel>
-                                    <TextBlock Text="WINDOWS INTERACTIVE LOGON STARTUP" Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" FontSize="12"/>
-                                    <TextBlock x:Name="TxtStartupState" Text="Checking HKCU Run registry..." Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="0,2,0,0"/>
-                                </StackPanel>
-                                <Button x:Name="BtnToggleStartup" Content="ENABLE STARTUP"
-                                        Style="{StaticResource HoloButtonStyle}" HorizontalAlignment="Right" Width="135"
-                                        Click="BtnToggleStartup_Click"/>
-                            </DockPanel>
-                        </Border>
-
-                        <!-- System Diagnostics Runner -->
-                        <Border Grid.Row="1" Background="{StaticResource BgCardBrush}" BorderBrush="#2600E5FF"
-                                BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,0,0,12">
-                            <StackPanel>
-                                <DockPanel Margin="0,0,0,6">
-                                    <TextBlock Text="SUBSYSTEM DIAGNOSTICS RUNNER" Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
-                                    <Button Content="RUN DIAGNOSTICS" Style="{StaticResource HoloSuccessButtonStyle}"
-                                            HorizontalAlignment="Right" Padding="10,4" Click="BtnRunDiagnostics_Click"/>
-                                </DockPanel>
-                                <TextBlock x:Name="TxtDiagnosticsOutput"
-                                           Text="Click 'RUN DIAGNOSTICS' to verify REST API, WebSocket, LLM &amp; Telemetry health."
-                                           Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
-
-                        <DockPanel Grid.Row="2" Margin="0,0,0,6">
-                            <TextBlock Text="4-TIER SECURITY AUDIT LOG" Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
-                            <Button Content="REFRESH AUDIT" Style="{StaticResource HoloButtonStyle}"
-                                    HorizontalAlignment="Right" Padding="10,3" Click="BtnRefreshAudit_Click"/>
-                        </DockPanel>
-
-                        <DataGrid x:Name="GridSecurityAudit" Grid.Row="3" AutoGenerateColumns="False">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="40"/>
-                                <DataGridTextColumn Header="Command" Binding="{Binding CommandType}" Width="115"/>
-                                <DataGridTextColumn Header="Risk" Binding="{Binding RiskLevel}" Width="80"/>
-                                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="80"/>
-                                <DataGridTextColumn Header="Timestamp" Binding="{Binding Timestamp}" Width="*"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </Grid>
-                </TabItem>
-
-                <!-- TAB 4: LIVE LOG VIEWER -->
-                <TabItem Header="LIVE LOGS">
-                    <Grid Margin="12">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-
-                        <DockPanel Grid.Row="0" Margin="0,0,0,8">
-                            <TextBlock Text="SEVERITY:" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <ComboBox x:Name="CmbLogSeverity" Width="115" SelectedIndex="0" SelectionChanged="CmbLogSeverity_SelectionChanged">
-                                <ComboBoxItem Content="ALL"/>
-                                <ComboBoxItem Content="INFO"/>
-                                <ComboBoxItem Content="WARNING"/>
-                                <ComboBoxItem Content="ERROR"/>
-                            </ComboBox>
-                            <Button Content="REFRESH LOGS" Style="{StaticResource HoloButtonStyle}"
-                                    HorizontalAlignment="Right" Padding="10,4" Click="BtnRefreshLogs_Click"/>
-                        </DockPanel>
-
-                        <ListBox x:Name="LstLogs" Grid.Row="1"
-                                 Background="#050D1A" BorderBrush="#3300E5FF" BorderThickness="1"
-                                 Foreground="{StaticResource TextPrimaryBrush}"
-                                 FontFamily="Consolas" FontSize="11"/>
-                    </Grid>
-                </TabItem>
-            </TabControl>
         </Grid>
-
-        <!-- ==================== 3. BOTTOM STATUS TICKER ==================== -->
-        <Border Grid.Row="2" Background="#071222" BorderBrush="#2600E5FF" BorderThickness="1"
-                CornerRadius="4" Padding="12,4" Margin="0,10,0,0">
-            <DockPanel>
-                <TextBlock x:Name="TxtStatusBar"
-                           Text="J.A.R.V.I.S. Mark VII Desktop HUD Initialized | Waiting for backend stream on 127.0.0.1:8765..."
-                           Foreground="{StaticResource TextMutedBrush}" FontSize="11" VerticalAlignment="Center"/>
-                <TextBlock x:Name="TxtClock" Text="00:00:00"
-                           Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="Bold" FontSize="11"
-                           HorizontalAlignment="Right" VerticalAlignment="Center"/>
-            </DockPanel>
-        </Border>
-    </Grid>
+    </Border>
 </Window>

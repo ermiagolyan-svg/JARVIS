@@ -11,8 +11,26 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+.pytest_cache/
 
 # Databases & Logs
 *.db
 *.sqlite3
+*.db-shm
+*.db-wal
+*.db-journal
 *.log
+Logs/
+
+# .NET 8 / WPF Build Artifacts & Visual Studio
+**/bin/
+**/obj/
+**/.vs/
+*.user
+*.suo
+Build/
+
+# Local Runtime Secrets & Self-Signed Certificates
+Configuration/auth_token.json
+Configuration/ssl_cert.pem
+Configuration/ssl_key.pem
