@@ -20,6 +20,7 @@ from Automation.Security.permission_manager import (
 from Automation.Windows.system_control import SystemControl, get_system_control
 from Automation.Applications.app_manager import AppManager, get_app_manager
 from Automation.FileSystem.file_manager import FileManager, get_file_manager
+from Automation.Web.web_search import WebSearchEngine, get_web_search_engine
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -82,6 +83,8 @@ ROUTE_TABLE = {
     "list dir": ("file_manager", "list_dir"),
     "file search": ("file_manager", "search"),
     "get log": ("file_manager", "get_operation_log"),
+    "web search": ("web_search", "search"),
+    "google search": ("web_search", "search"),
 }
 
 SYSTEM_ROUTES = {
@@ -102,6 +105,7 @@ class AutomationRouter:
         self._system = get_system_control()
         self._apps = get_app_manager()
         self._files = get_file_manager()
+        self._web = get_web_search_engine()
 
     @property
     def permission_manager(self) -> SecurityPermissionManager:
@@ -153,7 +157,7 @@ class AutomationRouter:
         route_key, (module_name, method_name) = matched
         # Recompute args_str based on the actual matched route key
         args_str = cmd_lower[len(route_key):].strip() if len(cmd_lower) > len(route_key) else ""
-        executor_map = {"system_control": self._system, "app_manager": self._apps, "file_manager": self._files}
+        executor_map = {"system_control": self._system, "app_manager": self._apps, "file_manager": self._files, "web_search": self._web}
         executor = executor_map.get(module_name)
         if not executor:
             return {"success": False, "error": f"Unknown module: {module_name}"}
@@ -191,6 +195,8 @@ class AutomationRouter:
                 return method(args_str.strip() or str(Path.home()))
             elif route_key == "file search":
                 return method(args_str.strip() if args_str.strip() else str(Path.home()))
+            elif route_key in ("web search", "google search"):
+                return method(args_str.strip())
             elif route_key == "get log":
                 return method()
         except Exception as exc:

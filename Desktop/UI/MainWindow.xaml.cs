@@ -1,4 +1,8 @@
 ﻿using System.Collections.ObjectModel;
+using System.IO;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -35,6 +39,8 @@ internal sealed class StarParticle
 
 public partial class MainWindow : Window
 {
+    private const string ConfigFilePath = @"D:\AI\JARVIS\Configuration\config.json";
+
     private readonly JarvisBackendClient _client;
     private readonly DispatcherTimer _animTimer;
     private readonly DispatcherTimer _pollTimer;
@@ -45,10 +51,10 @@ public partial class MainWindow : Window
     private Rect _restoreBounds = new(120, 80, 1640, 920);
     private bool _isWorkAreaMaximized;
     private bool _isFullScreen;
-    private bool _isLightLcdTheme; // Theme 2: Pure White Background + Pitch Black Stars for Transparent Case LCD
+    private bool _isLightLcdTheme;
     private readonly WindowChrome _defaultWindowChrome;
 
-    // 3D Cosmic Star Sphere (>2x Density: 740 Stars & 85 Neural Synapses)
+    // 3D Cosmic Star Sphere (740 Stars & 85 Neural Synapses)
     private const int StarCount = 740;
     private const int SynapseCount = 85;
     private readonly List<StarParticle> _stars = new(StarCount);
@@ -67,7 +73,7 @@ public partial class MainWindow : Window
     private bool _isMuted;
     private string _currentState = "IDLE";
     private string? _activePendingActionId;
-    private bool _testRedAlertMode; // F9 Toggle for testing Red Alert state
+    private bool _testRedAlertMode;
     private string _lastSeenWsMessage = string.Empty;
 
     private bool IsRedAlertActive => _testRedAlertMode || !string.IsNullOrWhiteSpace(_activePendingActionId);
@@ -123,6 +129,122 @@ public partial class MainWindow : Window
         };
     }
 
+    // ==================== CLOUD AI & WEB SEARCH CONFIG (config.json) ====================
+
+    private void LoadCloudAndWebConfigFromFile()
+    {
+        try
+        {
+            if (!File.Exists(ConfigFilePath)) return;
+            var root = JsonNode.Parse(File.ReadAllText(ConfigFilePath, Encoding.UTF8)) as JsonObject;
+            if (root == null) return;
+
+            if (root["cloud_ai"] is JsonObject cloud)
+            {
+                ChkCloudEnabled.IsChecked = cloud["enabled"]?.GetValue<bool>() ?? true;
+                string defProv = cloud["default_provider"]?.GetValue<string>() ?? "gemini";
+                foreach (ComboBoxItem item in CmbCloudProvider.Items)
+                {
+                    if (string.Equals(item.Content?.ToString(), defProv, StringComparison.OrdinalIgnoreCase))
+                    {
+                        CmbCloudProvider.SelectedItem = item;
+                        break;
+                    }
+                }
+                TxtProxyUrl.Text = cloud["proxy_url"]?.GetValue<string>() ?? string.Empty;
+                TxtGeminiKey.Text = cloud["gemini_api_key"]?.GetValue<string>() ?? string.Empty;
+                TxtGeminiModel.Text = cloud["gemini_model"]?.GetValue<string>() ?? "gemini-2.5-flash";
+                TxtClaudeKey.Text = cloud["claude_api_key"]?.GetValue<string>() ?? string.Empty;
+                TxtClaudeModel.Text = cloud["claude_model"]?.GetValue<string>() ?? "claude-3-7-sonnet-latest";
+                TxtOpenAiKey.Text = cloud["openai_api_key"]?.GetValue<string>() ?? string.Empty;
+                TxtOpenAiModel.Text = cloud["openai_model"]?.GetValue<string>() ?? "gpt-4o";
+            }
+
+            if (root["web_search"] is JsonObject web)
+            {
+                if (string.IsNullOrWhiteSpace(TxtProxyUrl.Text))
+                {
+                    TxtProxyUrl.Text = web["proxy_url"]?.GetValue<string>() ?? string.Empty;
+                }
+                TxtSerperKey.Text = web["serper_api_key"]?.GetValue<string>() ?? string.Empty;
+                TxtGoogleCseKey.Text = web["google_api_key"]?.GetValue<string>() ?? string.Empty;
+                TxtGoogleCx.Text = web["google_cx"]?.GetValue<string>() ?? string.Empty;
+            }
+        }
+        catch (Exception ex)
+        {
+            TxtCloudConfigResult.Text = $"[WARN] Could not read config.json: {ex.Message}";
+        }
+    }
+
+    private void BtnSaveCloudConfig_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            JsonObject root;
+            if (File.Exists(ConfigFilePath))
+            {
+                root = JsonNode.Parse(File.ReadAllText(ConfigFilePath, Encoding.UTF8)) as JsonObject ?? new JsonObject();
+            }
+            else
+            {
+                root = new JsonObject();
+            }
+
+            string selectedProvider = (CmbCloudProvider.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "gemini";
+            string proxy = TxtProxyUrl.Text.Trim();
+
+            root["cloud_ai"] = new JsonObject
+            {
+                ["enabled"] = ChkCloudEnabled.IsChecked == true,
+                ["default_provider"] = selectedProvider,
+                ["proxy_url"] = proxy,
+                ["gemini_api_key"] = TxtGeminiKey.Text.Trim(),
+                ["gemini_model"] = string.IsNullOrWhiteSpace(TxtGeminiModel.Text) ? "gemini-2.5-flash" : TxtGeminiModel.Text.Trim(),
+                ["claude_api_key"] = TxtClaudeKey.Text.Trim(),
+                ["claude_model"] = string.IsNullOrWhiteSpace(TxtClaudeModel.Text) ? "claude-3-7-sonnet-latest" : TxtClaudeModel.Text.Trim(),
+                ["openai_api_key"] = TxtOpenAiKey.Text.Trim(),
+                ["openai_model"] = string.IsNullOrWhiteSpace(TxtOpenAiModel.Text) ? "gpt-4o" : TxtOpenAiModel.Text.Trim()
+            };
+
+            root["web_search"] = new JsonObject
+            {
+                ["enabled"] = true,
+                ["provider"] = "auto",
+                ["proxy_url"] = proxy,
+                ["serper_api_key"] = TxtSerperKey.Text.Trim(),
+                ["google_api_key"] = TxtGoogleCseKey.Text.Trim(),
+                ["google_cx"] = TxtGoogleCx.Text.Trim(),
+                ["max_results"] = 4
+            };
+
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            File.WriteAllText(ConfigFilePath, root.ToJsonString(options), new UTF8Encoding(false));
+
+            TxtCloudConfigResult.Text = $"[OK] Saved to config.json ({DateTime.Now:HH:mm:ss}) — Active immediately!";
+            TxtStatusBar.Text = "Cloud AI & Web Search configuration updated.";
+        }
+        catch (Exception ex)
+        {
+            TxtCloudConfigResult.Text = $"[ERROR] Failed to save config.json: {ex.Message}";
+        }
+    }
+
+    private async void BtnTestWebSearch_Click(object sender, RoutedEventArgs e)
+    {
+        TxtCloudConfigResult.Text = "Searching live web via C.E.L.E.S.T.E. backend...";
+        var res = await _client.SendChatAsync("سلست، در گوگل سرچ کن آخرین اخبار فناوری و هوش مصنوعی چیست و خلاصه بگو.", "desktop");
+        if (res != null && !string.IsNullOrWhiteSpace(res.EffectiveText))
+        {
+            AppendChatMessage("C.E.L.E.S.T.E.", res.EffectiveText);
+            TxtCloudConfigResult.Text = $"[OK] Live web search response received ({DateTime.Now:HH:mm:ss}).";
+        }
+        else
+        {
+            TxtCloudConfigResult.Text = "[WARN] Backend did not return a response. Make sure jarvis_main.py is running.";
+        }
+    }
+
     // ==================== THEME SWITCHER (THEME 1 DARK vs THEME 2 TRANSPARENT LCD LIGHT) ====================
 
     private void BtnThemeSwitch_Click(object sender, RoutedEventArgs e) => ToggleLcdTheme();
@@ -134,7 +256,6 @@ public partial class MainWindow : Window
 
         if (_isLightLcdTheme)
         {
-            // THEME 2: Pure White (#FFFFFF = 100% Transparent on Case LCD) + Pitch Black Stars & Controls
             res["BgDeepNavyBrush"] = new SolidColorBrush(Colors.White);
             res["BackdropRadialBrush"] = new SolidColorBrush(Colors.White);
             res["BgPanelBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F8FFFFFF"));
@@ -168,7 +289,6 @@ public partial class MainWindow : Window
         }
         else
         {
-            // THEME 1: Original Cyber-Ice Dark Mode
             res["BgDeepNavyBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#05070B"));
 
             var radial = new RadialGradientBrush { Center = new Point(0.5, 0.5), RadiusX = 0.75, RadiusY = 0.75 };
@@ -433,7 +553,6 @@ public partial class MainWindow : Window
         double cx = CosmicSphereCanvas.Width * 0.5;
         double cy = CosmicSphereCanvas.Height * 0.5;
 
-        // 1. Rotating Outer & Inner Telemetry Orbital Rings
         _outerOrbitRotate = new RotateTransform(0, 300, 300);
         _outerOrbitRing = new Ellipse
         {
@@ -466,7 +585,6 @@ public partial class MainWindow : Window
         Canvas.SetTop(_innerOrbitRing, cy - 260);
         CosmicSphereCanvas.Children.Add(_innerOrbitRing);
 
-        // 2. Concentric Expanding Wave Rings (Visible during LISTENING / SPEAKING / RED ALERT)
         for (int w = 0; w < 3; w++)
         {
             var ring = new Ellipse
@@ -480,7 +598,6 @@ public partial class MainWindow : Window
             _listeningWaves.Add(ring);
         }
 
-        // 3. Neural Synapse Lines (85 lines connecting active front-hemisphere nodes)
         for (int s = 0; s < SynapseCount; s++)
         {
             var line = new Line
@@ -494,7 +611,6 @@ public partial class MainWindow : Window
             _synapseLines.Add(line);
         }
 
-        // 4. Fibonacci Sphere distribution for 740 larger, high-visibility star particles
         double goldenRatio = (1.0 + Math.Sqrt(5.0)) / 2.0;
         var rng = new Random(42);
 
@@ -543,13 +659,11 @@ public partial class MainWindow : Window
         bool isSpeaking = !_isMuted && _currentState.Contains("SPEAK");
         bool isThinking = !_isMuted && _currentState.Contains("THINK");
 
-        // Orbital rings counter-rotation
         if (_outerOrbitRotate != null)
             _outerOrbitRotate.Angle = (_outerOrbitRotate.Angle + (isRedAlert ? 0.65 : (isThinking ? 0.45 : 0.12))) % 360.0;
         if (_innerOrbitRotate != null)
             _innerOrbitRotate.Angle = (_innerOrbitRotate.Angle - (isRedAlert ? 0.75 : (isSpeaking ? 0.55 : 0.18))) % 360.0;
 
-        // Rotation speed & target radius
         double rotSpeed = isRedAlert ? 0.016 : (isThinking ? 0.022 : (isSpeaking ? 0.012 : (isListening ? 0.009 : 0.0045)));
         _rotY += rotSpeed;
         _rotX = Math.Sin(_phaseTime * 0.25) * 0.28;
@@ -557,7 +671,6 @@ public partial class MainWindow : Window
         double targetRadius = 220.0;
         if (isRedAlert)
         {
-            // Heartbeat pulse when awaiting user confirmation for critical commands
             targetRadius = 224.0 + Math.Sin(_phaseTime * 5.2) * 15.0 + Math.Cos(_phaseTime * 10.4) * 6.0;
         }
         else if (isSpeaking)
@@ -577,7 +690,6 @@ public partial class MainWindow : Window
 
         _currentRadius += (targetRadius - _currentRadius) * 0.18;
 
-        // Update Expanding Ripple Waves
         for (int w = 0; w < _listeningWaves.Count; w++)
         {
             var ring = _listeningWaves[w];
@@ -617,7 +729,6 @@ public partial class MainWindow : Window
         double cosX = Math.Cos(_rotX), sinX = Math.Sin(_rotX);
         double lcdScaleBoost = _isLightLcdTheme ? 1.16 : 1.0;
 
-        // Project 740 3D star particles with surface wave distortion
         foreach (var s in _stars)
         {
             double localR = _currentRadius;
@@ -680,7 +791,6 @@ public partial class MainWindow : Window
             Canvas.SetTop(s.Dot, sy - s.Dot.Height * 0.5);
         }
 
-        // Update Neural Synapse Web between neighboring front-facing stars
         double depthThreshold = isRedAlert ? 0.04 : 0.12;
         double alertPulse = isRedAlert ? (0.78 + 0.22 * Math.Sin(_phaseTime * 6.0)) : 1.0;
 
@@ -743,7 +853,7 @@ public partial class MainWindow : Window
     private void BtnToggleRightDrawer_Click(object sender, RoutedEventArgs e)
     {
         _rightOpen = !_rightOpen;
-        AnimateDrawer(RightDrawerTransform, TranslateTransform.XProperty, _rightOpen ? 0 : 540);
+        AnimateDrawer(RightDrawerTransform, TranslateTransform.XProperty, _rightOpen ? 0 : 560);
         BtnRightHandle.Visibility = _rightOpen ? Visibility.Collapsed : Visibility.Visible;
     }
 
@@ -765,13 +875,14 @@ public partial class MainWindow : Window
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
+        LoadCloudAndWebConfigFromFile();
         RefreshStartupButtonState();
         _client.StartBackgroundConnection();
 
         _chatMessages.Add(new ChatDisplayItem
         {
             SenderLabel = "C.E.L.E.S.T.E.",
-            Content = "سازه سایبرنتیک سلست آماده به کار است. کالبد پردازشی و ارتباط شبکه در وضعیت پایدار قرار دارند.",
+            Content = "سازه سایبرنتیک سلست آماده به کار است. کالبد پردازشی، حافظه SQLite و روتر آنلاین/ابری در وضعیت پایدار قرار دارند.",
             Timestamp = DateTime.Now.ToString("HH:mm:ss")
         });
 
@@ -884,7 +995,7 @@ public partial class MainWindow : Window
         {
             stateBrush = _isLightLcdTheme ? _lcdDarkCobaltBrush : _amberGlitchBrush;
             HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#2DF59E0B");
-            TxtReactorSubtitle.Text = "TACTICAL ANALYSIS // در حال پردازش منطقی در هسته Qwen 3.5...";
+            TxtReactorSubtitle.Text = "TACTICAL ANALYSIS // در حال پردازش منطقی در هسته...";
         }
         else if (_currentState.Contains("SPEAK"))
         {
@@ -904,7 +1015,7 @@ public partial class MainWindow : Window
         TxtCenterStateTitle.Foreground = stateBrush;
 
         TxtModelStatus.Text = modelLoaded
-            ? $"{modelName} // CUDA ONLINE"
+            ? $"{modelName} // HYBRID ONLINE"
             : $"{modelName} // STANDBY";
         TxtModelStatus.Foreground = modelLoaded ? activeAccent : _amberGlitchBrush;
 
@@ -1065,6 +1176,7 @@ public partial class MainWindow : Window
         }
 
         await PollBackendSubsystemsAsync();
+        GridFacts.ItemsSource = await _client.GetFactsAsync();
     }
 
     private async void BtnApproveAction_Click(object sender, RoutedEventArgs e)

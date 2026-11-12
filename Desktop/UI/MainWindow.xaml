@@ -32,8 +32,8 @@
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource CyanBorderDimBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="14,7"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="FontSize" Value="10.5"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -41,7 +41,7 @@
                     <ControlTemplate TargetType="TabItem">
                         <Border x:Name="Border" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
-                                CornerRadius="8" Margin="0,0,6,6" Padding="{TemplateBinding Padding}">
+                                CornerRadius="8" Margin="0,0,5,6" Padding="{TemplateBinding Padding}">
                             <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -128,7 +128,7 @@
         <Grid ClipToBounds="True">
             <!-- ==================== LAYER 0: FULL-SCREEN CELESTE COSMIC STAR SPHERE ==================== -->
             <Grid Background="{DynamicResource BackdropRadialBrush}" MouseDown="CosmicBackdrop_MouseDown">
-                <!-- Subtle Ambient Radial Halo (Hidden in LCD Light Mode for 100% pure white transparency) -->
+                <!-- Subtle Ambient Radial Halo -->
                 <Ellipse x:Name="AmbientHalo" Width="680" Height="680" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
                     <Ellipse.Fill>
                         <RadialGradientBrush>
@@ -216,7 +216,7 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Theme Switcher Button (Theme 1 Dark vs Theme 2 Transparent LCD White) -->
+                    <!-- Theme Switcher Button -->
                     <Button x:Name="BtnThemeSwitch" Grid.Column="5" Content="☀ LCD THEME" Width="116"
                             Style="{StaticResource HoloButtonStyle}" Click="BtnThemeSwitch_Click" Margin="0,0,8,0"
                             ToolTip="Switch between Dark Cyber-Ice and High-Contrast Transparent LCD White Mode (F10)"/>
@@ -225,7 +225,7 @@
                     <Button x:Name="BtnMasterMute" Grid.Column="6" Content="MIC ACTIVE" Width="114"
                             Style="{StaticResource HoloSuccessButtonStyle}" Click="BtnMasterMute_Click" Margin="0,0,12,0"/>
 
-                    <!-- Custom Window Chrome Buttons (FullScreen + Min + Max + Close) -->
+                    <!-- Custom Window Chrome Buttons -->
                     <StackPanel Grid.Column="7" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button x:Name="BtnFullScreen" Content="⛶" Style="{StaticResource WindowControlButtonStyle}" Click="BtnFullScreen_Click" ToolTip="Full Screen (F11)" Margin="0,0,2,0"/>
                         <Button Content="─" Style="{StaticResource WindowControlButtonStyle}" Click="BtnMinimize_Click" ToolTip="Minimize"/>
@@ -341,13 +341,13 @@
                     Margin="20,0,0,0" Style="{StaticResource HoloButtonStyle}" Padding="14,12"
                     Click="BtnToggleLeftDrawer_Click"/>
 
-            <!-- 3B. RIGHT SLIDE-OUT DRAWER: 4 MANAGEMENT TABS -->
-            <Border x:Name="RightDrawer" Width="500" HorizontalAlignment="Right" VerticalAlignment="Stretch"
+            <!-- 3B. RIGHT SLIDE-OUT DRAWER: 5 MANAGEMENT TABS -->
+            <Border x:Name="RightDrawer" Width="520" HorizontalAlignment="Right" VerticalAlignment="Stretch"
                     Margin="0,82,20,58" Background="{DynamicResource BgPanelBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
                     CornerRadius="16" Padding="18" Effect="{StaticResource PanelShadowEffect}">
                 <Border.RenderTransform>
-                    <TranslateTransform x:Name="RightDrawerTransform" X="540"/>
+                    <TranslateTransform x:Name="RightDrawerTransform" X="560"/>
                 </Border.RenderTransform>
                 <Grid>
                     <Grid.RowDefinitions>
@@ -472,7 +472,105 @@
                             </Grid>
                         </TabItem>
 
-                        <!-- TAB 3: SECURITY & STARTUP -->
+                        <!-- TAB 3: HYBRID CLOUD AI & GOOGLE WEB SEARCH CONFIG -->
+                        <TabItem Header="API &amp; WEB">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,8,6,4">
+                                <StackPanel>
+                                    <TextBlock Text="HYBRID CLOUD AI &amp; WEB SEARCH ROUTER" Foreground="{DynamicResource CyanSecondaryBrush}" FontSize="12.5" FontWeight="Bold" Margin="0,0,0,4"/>
+                                    <TextBlock Text="Local Qwen 3.5 9B handles daily tasks; Gemini, Claude &amp; ChatGPT activate on demand."
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                                    <!-- Router & Proxy Card -->
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,0,0,10">
+                                        <StackPanel>
+                                            <DockPanel Margin="0,0,0,8">
+                                                <TextBlock Text="Cloud AI Router Enabled" FontWeight="SemiBold" FontSize="11.5" VerticalAlignment="Center"/>
+                                                <CheckBox x:Name="ChkCloudEnabled" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                            </DockPanel>
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="135"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Default Cloud Engine:" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" VerticalAlignment="Center"/>
+                                                <ComboBox x:Name="CmbCloudProvider" Grid.Column="1" SelectedIndex="0">
+                                                    <ComboBoxItem Content="gemini"/>
+                                                    <ComboBoxItem Content="claude"/>
+                                                    <ComboBoxItem Content="openai"/>
+                                                    <ComboBoxItem Content="local"/>
+                                                </ComboBox>
+                                            </Grid>
+                                            <TextBlock Text="HTTP / SOCKS5 Proxy URL (Optional for API &amp; Search):" Foreground="{DynamicResource TextMutedBrush}" FontSize="10.5" Margin="0,0,0,4"/>
+                                            <TextBox x:Name="TxtProxyUrl" Style="{StaticResource HoloTextBoxStyle}" FontFamily="Consolas" FontSize="11.5" ToolTip="e.g. http://127.0.0.1:10809"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Gemini API Card -->
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,0,0,10">
+                                        <StackPanel>
+                                            <TextBlock Text="GOOGLE GEMINI API" Foreground="{DynamicResource CyanSecondaryBrush}" FontWeight="Bold" FontSize="11.5" Margin="0,0,0,6"/>
+                                            <TextBlock Text="API Key:" Foreground="{DynamicResource TextMutedBrush}" FontSize="10.5" Margin="0,0,0,3"/>
+                                            <TextBox x:Name="TxtGeminiKey" Style="{StaticResource HoloTextBoxStyle}" FontFamily="Consolas" FontSize="11" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Model Name:" Foreground="{DynamicResource TextMutedBrush}" FontSize="10.5" Margin="0,0,0,3"/>
+                                            <TextBox x:Name="TxtGeminiModel" Style="{StaticResource HoloTextBoxStyle}" FontFamily="Consolas" FontSize="11" Text="gemini-2.5-flash"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Claude API Card -->
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,0,0,10">
+                                        <StackPanel>
+                                            <TextBlock Text="ANTHROPIC CLAUDE API" Foreground="{DynamicResource CyanSecondaryBrush}" FontWeight="Bold" FontSize="11.5" Margin="0,0,0,6"/>
+                                            <TextBlock Text="API Key:" Foreground="{DynamicResource TextMutedBrush}" FontSize="10.5" Margin="0,0,0,3"/>
+                                            <TextBox x:Name="TxtClaudeKey" Style="{StaticResource HoloTextBoxStyle}" FontFamily="Consolas" FontSize="11" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Model Name:" Foreground="{DynamicResource TextMutedBrush}" FontSize="10.5" Margin="0,0,0,3"/>
+                                            <TextBox x:Name="TxtClaudeModel" Style="{StaticResource HoloTextBoxStyle}" FontFamily="Consolas" FontSize="11" Text="claude-3-7-sonnet-latest"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- OpenAI API Card -->
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,0,0,10">
+                                        <StackPanel>
+                                            <TextBlock Text="OPENAI CHATGPT API" Foreground="{DynamicResource CyanSecondaryBrush}" FontWeight="Bold" FontSize="11.5" Margin="0,0,0,6"/>
+                                            <TextBlock Text="API Key:" Foreground="{DynamicResource TextMutedBrush}" FontSize="10.5" Margin="0,0,0,3"/>
+                                            <TextBox x:Name="TxtOpenAiKey" Style="{StaticResource HoloTextBoxStyle}" FontFamily="Consolas" FontSize="11" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Model Name:" Foreground="{DynamicResource TextMutedBrush}" FontSize="10.5" Margin="0,0,0,3"/>
+                                            <TextBox x:Name="TxtOpenAiModel" Style="{StaticResource HoloTextBoxStyle}" FontFamily="Consolas" FontSize="11" Text="gpt-4o"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Google & Web Search Card -->
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="GOOGLE &amp; LIVE WEB SEARCH" Foreground="{DynamicResource CyanSecondaryBrush}" FontWeight="Bold" FontSize="11.5" Margin="0,0,0,4"/>
+                                            <TextBlock Text="Works zero-key out-of-the-box; add Serper or Google CSE keys for enhanced ranking."
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="10.5" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Serper.dev Google API Key (Optional):" Foreground="{DynamicResource TextMutedBrush}" FontSize="10.5" Margin="0,0,0,3"/>
+                                            <TextBox x:Name="TxtSerperKey" Style="{StaticResource HoloTextBoxStyle}" FontFamily="Consolas" FontSize="11" Margin="0,0,0,6"/>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                                                    <TextBlock Text="Google CSE Key:" Foreground="{DynamicResource TextMutedBrush}" FontSize="10.5" Margin="0,0,0,3"/>
+                                                    <TextBox x:Name="TxtGoogleCseKey" Style="{StaticResource HoloTextBoxStyle}" FontFamily="Consolas" FontSize="11"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Margin="4,0,0,0">
+                                                    <TextBlock Text="Google CX ID:" Foreground="{DynamicResource TextMutedBrush}" FontSize="10.5" Margin="0,0,0,3"/>
+                                                    <TextBox x:Name="TxtGoogleCx" Style="{StaticResource HoloTextBoxStyle}" FontFamily="Consolas" FontSize="11"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Button Content="💾  SAVE API &amp; WEB CONFIGURATION" Style="{StaticResource HoloSuccessButtonStyle}" Margin="0,0,0,8" Click="BtnSaveCloudConfig_Click"/>
+                                    <Button Content="🌐  TEST LIVE GOOGLE SEARCH" Style="{StaticResource HoloButtonStyle}" Click="BtnTestWebSearch_Click"/>
+                                    <TextBlock x:Name="TxtCloudConfigResult" Text="" Foreground="{DynamicResource CyanSecondaryBrush}" FontSize="11.5" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
+
+                        <!-- TAB 4: SECURITY & STARTUP -->
                         <TabItem Header="SECURITY">
                             <Grid Margin="4,8,4,4">
                                 <Grid.RowDefinitions>
@@ -519,7 +617,7 @@
                             </Grid>
                         </TabItem>
 
-                        <!-- TAB 4: LIVE LOGS -->
+                        <!-- TAB 5: LIVE LOGS -->
                         <TabItem Header="LOGS">
                             <Grid Margin="4,8,4,4">
                                 <Grid.RowDefinitions>
