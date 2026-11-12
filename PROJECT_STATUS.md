@@ -5,3 +5,4 @@
 - Stage 4.1 to 4.3 (4-Tier Security, HardwareMonitor, AutomationRouter): COMPLETED & VERIFIED
 - Stage 5.1 to 5.2 + Patch 5.2 (NetworkAuthManager with ipaddress & brute-force lockout, FastAPI REST Server on port 8765): COMPLETED & VERIFIED
 - Stage 5.3 (JarvisWebSocketManager at /ws/lumia & /ws/desktop, 16kHz PCM binary audio streaming, automatic mic failover network <-> mic): COMPLETED & VERIFIED
+- Stage 6.1 (JarvisMasterService 9-step orchestrator, Single-Instance Mutex, VRAM-safe LLM adoption & --dry-run): COMPLETED & VERIFIED
