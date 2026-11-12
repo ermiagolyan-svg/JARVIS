@@ -45,6 +45,20 @@ class STTEngine:
             pass
         return "cpu"
 
+    def _select_optimal_device(self):
+        try:
+            import pynvml
+            pynvml.nvmlInit()
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            free_mb = info.free / (1024 * 1024)
+            pynvml.nvmlShutdown()
+            if free_mb >= 2400:
+                return "cuda", "int8_float16", 8
+        except Exception as exc:
+            logger.debug("pynvml unavailable (%s), falling back to CPU", exc)
+        return "cpu", "int8", 8
+
     def initialize(self):
         if self._initialized and self._model is not None:
             logger.info("STT engine already initialized")
@@ -78,10 +92,13 @@ class STTEngine:
         lang = self._detect_language(language)
         logger.debug("Transcribing PCM (%d bytes, %d Hz, lang=%s)", len(pcm_bytes), sample_rate, lang)
         pcm_array = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+        import time
+        t0 = time.time()
         segments, info = self._model.transcribe(
             pcm_array, language=lang if lang != "en" else None, task="transcribe",
             vad_filter=True, vad_parameters={"min_silence_duration_ms": 500, "threshold": 0.5},
         )
+        latency_ms = (time.time() - t0) * 1000
         text_parts = []
         segments_list = []
         for seg in segments:
@@ -91,7 +108,8 @@ class STTEngine:
         result = {"text": " ".join(text_parts).strip(), "language": info.language,
                   "language_probability": round(info.language_probability, 4),
                   "segments": segments_list,
-                  "duration": round(info.duration, 3) if hasattr(info, "duration") else 0.0}
+                  "duration": round(info.duration, 3) if hasattr(info, "duration") else 0.0,
+                  "latency_ms": round(latency_ms, 2)}
         logger.info("Transcription complete: lang=%s, duration=%.2fs, text_len=%d",
                      result["language"], result["duration"], len(result["text"]))
         return result

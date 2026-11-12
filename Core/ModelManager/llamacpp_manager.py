@@ -7,7 +7,7 @@ optimized for RTX 3080 + Ryzen 7 9700X.
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -15,12 +15,12 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 SERVER_HOST = '127.0.0.1'
 DEFAULT_SERVER_PORT = 8080
+DEFAULT_CONTEXT_LENGTH = 4096
 HEALTH_URL = f'http://{SERVER_HOST}:{DEFAULT_SERVER_PORT}/health'
 BASE_URL = f'http://{SERVER_HOST}:{DEFAULT_SERVER_PORT}/v1'
 
 OPTIMAL_FLAGS = [
     '-ngl', '99',           # offload all layers to GPU (RTX 3080 10GB)
-    '-c', '40960',          # large context window for long conversations
     '-fa', 'on',            # flash attention for speedup
     '--log-disable',        # reduce noise in background mode
 ]
@@ -78,6 +78,33 @@ class LlamaCppManager:
     @property
     def base_url(self) -> str:
         return f'http://{self.host}:{self.port}/v1'
+
+    # -------------------------------------------------------------------
+    def _build_server_args(self, model_path: str) -> List[str]:
+        """Build the full command-line arguments for llama-server.exe.
+
+        Reads context_length dynamically from config.json.
+        Falls back to default if not specified in config.
+        """
+        args = [
+            model_path,
+            '-ngl', str(self._config.get('n_gpu_layers', 99)),
+            '-c', str(self._config.get('context_length', DEFAULT_CONTEXT_LENGTH)),
+            '-fa', 'on' if self._config.get('flash_attn', True) else 'off',
+            '--log-disable',
+        ]
+
+        # Optional: CPU threads override
+        cpu_threads = self._config.get('cpu_threads')
+        if cpu_threads is not None:
+            args += ['-t', str(cpu_threads)]
+
+        # Optional: kv_cache_type
+        kv_cache = self._config.get('kv_cache_type')
+        if kv_cache:
+            args += ['--cache-type-kv', kv_cache]
+
+        return args
 
 
     # -------------------------------------------------------------------
@@ -204,13 +231,9 @@ class LlamaCppManager:
             # Warn but still launch (server will error gracefully)
             print('[LlamaCppManager WARN] Model not found yet, launching without it.')
 
-        # Build command line with optimal flags
-        cmd = [binary_path, '-m', model_path, '--host', self.host, '--port', str(self.port)]
-        cmd.extend(OPTIMAL_FLAGS)
-
-        kv_cache = self._config.get('kv_cache_type', 'q8_0')
-        if isinstance(kv_cache, str):
-            cmd.extend(['--cache-type-kv', kv_cache])
+        # Build command line using _build_server_args (reads context_length from config)
+        args = self._build_server_args(model_path)
+        cmd = [binary_path] + args + ['--host', self.host, '--port', str(self.port)]
 
         print('[LlamaCppManager] Launching: {} ...'.format(
             ' '.join(cmd[:5]) + ('...' if len(cmd) > 5 else '')

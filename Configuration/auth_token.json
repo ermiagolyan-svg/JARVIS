@@ -1,7 +1,7 @@
 {
-  "master_token": "05e60800b4c737066c9c58072983876bf05315d56b79d0ea7915160c20330eab",
+  "master_token": "9c2055e265df379394337d1f58d09b23bbf09bb20aaa1165a00072d74b42df36",
   "pairing_pin": "169414",
   "created_at": "2026-11-11T16:33:35.301913",
-  "last_rotated": "2026-11-11T16:35:41.759672",
-  "revocation_count": 1
+  "last_rotated": "2026-11-12T09:37:15.927181",
+  "revocation_count": 3
 }

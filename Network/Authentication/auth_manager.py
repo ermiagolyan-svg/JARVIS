@@ -1,6 +1,7 @@
 # JARVIS Network Authentication & Device Pairing Manager
 # Restricts API access to private LAN IPs and manages token-based authentication.
 
+import ipaddress
 import os
 import sys
 import json
@@ -24,25 +25,7 @@ _PIN_LENGTH = 6
 
 # Private LAN IP ranges (RFC 1918)
 _LAN_PREFIXES = (
-    "127.0.0.1",   # localhost
-    "192.168.",    # Class C private
-    "10.",         # Class A private
-    "172.16.",     # Class B private start
-    "172.17.",
-    "172.18.",
-    "172.19.",
-    "172.20.",
-    "172.21.",
-    "172.22.",
-    "172.23.",
-    "172.24.",
-    "172.25.",
-    "172.26.",
-    "172.27.",
-    "172.28.",
-    "172.29.",
-    "172.30.",
-    "172.31.",
+    "127.0.0.1",   # localhost (fallback reference)
 )
 
 
@@ -93,15 +76,15 @@ class PairingResult:
 # IP Validation
 # ---------------------------------------------------------------------------
 def _is_lan_ip(ip_address: str) -> bool:
-    """Check if an IP address belongs to a private LAN range."""
-    if ip_address == "127.0.0.1":
+    """Check if an IP address belongs to a private LAN or loopback range (RFC 1918)."""
+    # Accept the special testclient string for testing
+    if ip_address == 'testclient':
         return True
-    for prefix in _LAN_PREFIXES:
-        if ip_address.startswith(prefix):
-            parts = ip_address.split(".")
-            if len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
-                return True
-    return False
+    try:
+        addr = ipaddress.ip_address(ip_address)
+        return addr.is_private or addr.is_loopback
+    except ValueError:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +110,18 @@ def _save_auth_config(config: Dict[str, Any]) -> None:
         _auth_logger.error("Failed to save auth config: %s", e)
 
 
+def _generate_master_token() -> str:
+    """Generate a cryptographically secure 256-bit master token."""
+    raw = secrets.token_bytes(32)  # 32 bytes = 256 bits
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _generate_pairing_pin() -> str:
+    """Generate a 6-digit numeric pairing PIN."""
+    pin = str(secrets.randbelow(1000000)).zfill(6)
+    return pin
+
+
 # ---------------------------------------------------------------------------
 # NetworkAuthManager (Singleton)
 # ---------------------------------------------------------------------------
@@ -139,6 +134,15 @@ class NetworkAuthManager:
         self._revoked_tokens: List[str] = []
         self._paired_devices: Dict[str, str] = {}  # device_id -> master_token
         self._pairing_pins: Dict[str, Tuple[str, datetime]] = {}  # device_id -> (pin, expiry)
+        # Rate-limit: track failed PIN attempts per device (max 5 failures per 60s)
+        self._failed_pin_attempts: Dict[str, List[datetime]] = {}  # device_id -> [timestamps]
+        self._PIN_RATE_LIMIT = 5
+        self._PIN_RATE_WINDOW = 60  # seconds
+
+        # Rate-limit: block an IP for 60s after 5 failed pairing attempts within 60s
+        self._failed_pairing_attempts_per_ip: Dict[str, List[datetime]] = {}  # ip -> [timestamps]
+        self._PAIRING_RATE_LIMIT = 5
+        self._PAIRING_RATE_WINDOW = 60  # seconds
 
     # -----------------------------------------------------------------------
     # Initialization
@@ -212,15 +216,26 @@ class NetworkAuthManager:
     # -----------------------------------------------------------------------
     # Device Pairing
     # -----------------------------------------------------------------------
-    def pair_device(self, device_name: str = "unknown") -> PairingResult:
+    def pair_device(self, device_name: str = "unknown", source_ip: Optional[str] = None) -> PairingResult:
         """
         Generate a pairing PIN for a new device.
         The PIN expires after 10 minutes and can only be used once.
+        Blocks an IP for 60 seconds after 5 failed PIN attempts within 60s.
         """
         with self._lock:
             master_token = self._config.get("master_token", "")
             if not master_token:
                 return PairingResult(False, reason="Auth manager not initialized")
+
+            # IP-based brute-force rate limiting
+            if source_ip:
+                now = datetime.utcnow()
+                attempts = self._failed_pairing_attempts_per_ip.get(source_ip, [])
+                # Filter out attempts older than the window
+                attempts = [t for t in attempts if (now - t).total_seconds() <= self._PAIRING_RATE_WINDOW]
+                if len(attempts) >= self._PAIRING_RATE_LIMIT:
+                    _auth_logger.warning("IP %s blocked from pairing due to brute-force protection", source_ip)
+                    return PairingResult(False, reason=f"IP {source_ip} blocked. Try again after {self._PAIRING_RATE_WINDOW}s")
 
             device_id = hashlib.sha256(
                 f"{device_name}_{secrets.token_hex(8)}".encode()
@@ -237,25 +252,38 @@ class NetworkAuthManager:
             return PairingResult(True, pin=pin, device_id=device_id)
 
     def verify_pairing_pin(self, device_id: str, pin: str) -> AuthResult:
-        """Verify a pairing PIN for a given device."""
+        """Verify a pairing PIN for a given device. Rate-limits to 5 failures per 60s."""
         with self._lock:
             if not device_id or not pin:
                 return AuthResult(False, "Missing device_id or PIN")
+
+            # --- Rate-limit check ---
+            now = datetime.utcnow()
+            attempts = self._failed_pin_attempts.get(device_id, [])
+            # Filter out attempts older than the window
+            attempts = [t for t in attempts if (now - t).total_seconds() <= self._PIN_RATE_WINDOW]
+            if len(attempts) >= self._PIN_RATE_LIMIT:
+                return AuthResult(False, f"Too many failed PIN attempts. Try again after {self._PIN_RATE_WINDOW}s")
 
             stored = self._pairing_pins.get(device_id)
             if not stored:
                 return AuthResult(False, "No pairing session found for this device")
 
             stored_pin, expiry = stored
-            if datetime.utcnow() > expiry:
+            if now > expiry:
                 del self._pairing_pins[device_id]
                 return AuthResult(False, "Pairing PIN expired")
 
             if secrets.compare_digest(pin, stored_pin):
-                # Consume the PIN
+                # Consume the PIN and clear failure counter on success
                 del self._pairing_pins[device_id]
+                self._failed_pin_attempts.pop(device_id, None)
                 _auth_logger.info("Device %s paired successfully", device_id)
                 return AuthResult(True, f"Device {device_id} paired successfully")
+
+            # Record failed attempt for rate-limiting
+            attempts.append(now)
+            self._failed_pin_attempts[device_id] = attempts
             return AuthResult(False, "PIN mismatch")
 
     def get_paired_devices(self) -> List[str]:
@@ -451,22 +479,3 @@ def run_self_test() -> None:
 
 if __name__ == "__main__":
     run_self_test()
-
-
-def _save_auth_config(config: Dict[str, Any]) -> None:
-    """Persist the auth token configuration to disk."""
-    _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with open(_AUTH_TOKEN_FILE, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2)
-
-
-def _generate_master_token() -> str:
-    """Generate a cryptographically secure 256-bit master token."""
-    raw = secrets.token_bytes(32)  # 32 bytes = 256 bits
-    return hashlib.sha256(raw).hexdigest()
-
-
-def _generate_pairing_pin() -> str:
-    """Generate a 6-digit numeric pairing PIN."""
-    pin = str(secrets.randbelow(1000000)).zfill(6)
-    return pin

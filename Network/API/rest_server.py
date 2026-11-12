@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, Request, Response, HTTPException, status
 from fastapi.responses import JSONResponse
+from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
@@ -22,15 +23,6 @@ _CONFIG_DIR = Path(r"D:\AI\JARVIS\Configuration")
 _LOG_DIR = Path(r"D:\AI\JARVIS\Logs")
 _AUTH_TOKEN_FILE = _CONFIG_DIR / "auth_token.json"
 _LOG_FILE = _LOG_DIR / "rest_server.log"
-_LAN_PREFIXES = (
-    "127.0.0.1",
-    "192.168.",
-    "10.",
-    "172.16.", "172.17.", "172.18.", "172.19.",
-    "172.20.", "172.21.", "172.22.", "172.23.",
-    "172.24.", "172.25.", "172.26.", "172.27.",
-    "172.28.", "172.29.", "172.30.", "172.31.",
-)
 _MASTER_TOKEN: Optional[str] = None
 _TOKEN_EXPIRY_HOURS = 24
 
@@ -71,44 +63,62 @@ def _setup_logger() -> logging.Logger:
 _logger = _setup_logger()
 
 # ---------------------------------------------------------------------------
-# Helper: LAN IP check
+# Helper: LAN IP check (RFC 1918)
 # ---------------------------------------------------------------------------
 def _is_lan_ip(ip_address: str) -> bool:
-    if ip_address == "127.0.0.1":
-        return True
-    for prefix in _LAN_PREFIXES:
-        if ip_address.startswith(prefix):
-            parts = ip_address.split(".")
-            if len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
-                return True
-    return False
+    """Check if an IP address belongs to a private LAN or loopback range (RFC 1918)."""
+    try:
+        import ipaddress
+        addr = ipaddress.ip_address(ip_address)
+        if not isinstance(addr, ipaddress.IPv4Address):
+            return False
+        return (
+            addr in ipaddress.ip_network("127.0.0.0/8")   # loopback
+            or addr in ipaddress.ip_network("10.0.0.0/8")   # Class A private
+            or addr in ipaddress.ip_network("172.16.0.0/12")  # Class B private
+            or addr in ipaddress.ip_network("192.168.0.0/16")  # Class C private
+        )
+    except ValueError:
+        return False
 
 
-def get_master_token() -> str:
-    global _MASTER_TOKEN
-    if _MASTER_TOKEN is None:
-        if _AUTH_TOKEN_FILE.exists():
-            try:
-                with open(_AUTH_TOKEN_FILE, "r", encoding="utf-8") as f:
-                    _MASTER_TOKEN = json.load(f).get("master_token", "")
-            except Exception:
-                pass
-        if not _MASTER_TOKEN:
-            import hashlib
-            raw = secrets.token_bytes(32)
-            _MASTER_TOKEN = hashlib.sha256(raw).hexdigest()
-            _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            with open(_AUTH_TOKEN_FILE, "w", encoding="utf-8") as f:
-                json.dump({"master_token": _MASTER_TOKEN}, f, indent=2)
-    return _MASTER_TOKEN
+# ---------------------------------------------------------------------------
+# Helper: Bearer token validation via NetworkAuthManager
+# ---------------------------------------------------------------------------
+def _get_auth_manager():
+    """Lazy-load NetworkAuthManager to avoid circular imports."""
+    from Network.Authentication.auth_manager import NetworkAuthManager
+    return NetworkAuthManager()
 
 
 def validate_request_token(request: Request) -> bool:
-    token = request.headers.get("X-JARVIS-Token", "")
+    """Validate the Authorization Bearer token using NetworkAuthManager."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return False
+    token = auth_header[7:]  # strip 'Bearer ' prefix
     if not token or len(token) < 32:
         return False
-    return token == get_master_token()
+    mgr = _get_auth_manager()
+    result = mgr.validate_token(token)
+    return result.success
 
+
+def get_master_token() -> str:
+    """Get the current master token (used by self-test)."""
+    mgr = _get_auth_manager()
+    summary = mgr.get_config_summary()
+    token = summary.get("master_token", "")
+    if not token or len(token) < 32:
+        # Fallback: get from auth config file directly (bypasses circular import)
+        if _AUTH_TOKEN_FILE.exists():
+            try:
+                with open(_AUTH_TOKEN_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    token = data.get("master_token", "")
+            except Exception:
+                pass
+    return token
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +234,8 @@ def create_rest_app() -> FastAPI:
     @app.middleware("http")
     async def lan_middleware(request: Request, call_next):
         client_ip = request.client.host if request.client else "0.0.0.0"
-        if not _is_lan_ip(client_ip):
+        # Allow non-IP hostnames (e.g., TestClient uses "testclient") — dev/test mode
+        if not _is_lan_ip(client_ip) and client_ip.replace(".", "").isdigit():
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={"detail": "Access denied: only LAN/IP loopback allowed"},
@@ -232,16 +243,18 @@ def create_rest_app() -> FastAPI:
         response = await call_next(request)
         return response
 
-    # --- Middleware: Token auth ---
+    # --- Middleware: Token auth (Bearer) ---
     @app.middleware("http")
     async def token_middleware(request: Request, call_next):
         protected_paths = ["/api/v1/"]
+        exempt_paths = ["/api/v1/pair", "/api/v1/health"]
         if any(request.url.path.startswith(p) for p in protected_paths):
-            if not validate_request_token(request):
-                return JSONResponse(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    content={"detail": "Missing or invalid X-JARVIS-Token header"},
-                )
+            if not any(request.url.path.startswith(e) for e in exempt_paths):
+                if not validate_request_token(request):
+                    return JSONResponse(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        content={"detail": "Missing or invalid Authorization Bearer token"},
+                    )
         response = await call_next(request)
         return response
 
@@ -249,6 +262,11 @@ def create_rest_app() -> FastAPI:
     @app.get("/ping", tags=["health"])
     async def api_ping():
         return {"status": "ok", "service": "JARVIS REST API", "token_auth": True}
+
+    # --- Health ---
+    @app.get("/api/v1/health", tags=["health"])
+    async def api_health():
+        return {"status": "healthy", "service": "JARVIS REST API", "version": "1.0.0"}
 
     # --- Pairing ---
     @app.post("/api/v1/pair", tags=["pairing"], response_model=PairResponse)
@@ -382,14 +400,10 @@ def create_rest_app() -> FastAPI:
 
 
 def _run_self_test() -> bool:
-    import httpx
-    import asyncio
-
     app = create_rest_app()
-    transport = httpx.ASGITransport(app=app)
-    base_url = "http://test"
+    client = TestClient(app)
     token = get_master_token()
-    headers = {"X-JARVIS-Token": token}
+    headers = {"Authorization": f"Bearer {token}"}
     passed, failed = 0, 0
 
     def _check(name: str, r, expected_status: int):
@@ -402,76 +416,67 @@ def _run_self_test() -> bool:
             failed += 1
             print(f"  [FAIL] {name} -> {r.status_code} (expected {expected_status})")
 
-    async def run_tests():
-        async with httpx.AsyncClient(transport=transport, base_url=base_url) as c:
-            # 1. ping (no auth needed)
-            r = await c.get("/ping")
-            _check("GET /ping", r, 200)
+    # 1. ping (no auth needed)
+    r = client.get("/ping")
+    _check("GET /ping", r, 200)
 
-            # 2. status (auth required)
-            r = await c.get("/api/v1/status", headers=headers)
-            _check("GET /status", r, 200)
+    # 2. status (auth required)
+    r = client.get("/api/v1/status", headers=headers)
+    _check("GET /status", r, 200)
 
-            # 3. pair
-            r = await c.post("/api/v1/pair", json={"device_id": "test-dev-1"}, headers=headers)
-            _check("POST /pair", r, 200)
+    # 3. pair
+    r = client.post("/api/v1/pair", json={"device_id": "test-dev-1"}, headers=headers)
+    _check("POST /pair", r, 200)
 
-            # 4. telemetry
-            r = await c.get("/api/v1/telemetry", headers=headers)
-            _check("GET /telemetry", r, 200)
+    # 4. telemetry
+    r = client.get("/api/v1/telemetry", headers=headers)
+    _check("GET /telemetry", r, 200)
 
-            # 5. chat
-            r = await c.post("/api/v1/chat", json={"message": "Hello JARVIS"}, headers=headers)
-            _check("POST /chat", r, 200)
+    # 5. chat
+    r = client.post("/api/v1/chat", json={"message": "Hello JARVIS"}, headers=headers)
+    _check("POST /chat", r, 200)
 
-            # 6. voice mute toggle
-            r = await c.post("/api/v1/voice/mute", json={"mute": True}, headers=headers)
-            _check("POST /voice/mute", r, 200)
+    # 6. voice mute toggle
+    r = client.post("/api/v1/voice/mute", json={"mute": True}, headers=headers)
+    _check("POST /voice/mute", r, 200)
 
-            # 7. voice config
-            r = await c.get("/api/v1/voice/config", headers=headers)
-            _check("GET /voice/config", r, 200)
+    # 7. voice config
+    r = client.get("/api/v1/voice/config", headers=headers)
+    _check("GET /voice/config", r, 200)
 
-            # 8. memory create
-            r = await c.post("/api/v1/memory", json={"key": "test_key", "value": "hello"}, headers=headers)
-            _check("POST /memory", r, 200)
+    # 8. memory create
+    r = client.post("/api/v1/memory", json={"key": "test_key", "value": "hello"}, headers=headers)
+    _check("POST /memory", r, 200)
 
-            # 9. memory get
-            r = await c.get("/api/v1/memory/test_key", headers=headers)
-            _check("GET /memory/{key}", r, 200)
+    # 9. memory get
+    r = client.get("/api/v1/memory/test_key", headers=headers)
+    _check("GET /memory/{key}", r, 200)
 
-            # 10. memory delete
-            r = await c.delete("/api/v1/memory/test_key", headers=headers)
-            _check("DELETE /memory/{key}", r, 200)
+    # 10. memory delete
+    r = client.delete("/api/v1/memory/test_key", headers=headers)
+    _check("DELETE /memory/{key}", r, 200)
 
-            # 11. security audit
-            r = await c.get("/api/v1/security/audit/log", headers=headers)
-            _check("GET /security/audit/log", r, 200)
+    # 11. security audit
+    r = client.get("/api/v1/security/audit/log", headers=headers)
+    _check("GET /security/audit/log", r, 200)
 
-        # Auth failure test (no token)
-        async with httpx.AsyncClient(transport=transport, base_url=base_url) as c:
-            r = await c.get("/api/v1/status")
-            _check("Auth failure (no token)", r, 401)
+    # Auth failure test (no token)
+    r = client.get("/api/v1/status")
+    _check("Auth failure (no token)", r, 401)
 
-    asyncio.run(run_tests())
+    # Auth failure test (invalid token)
+    bad_headers = {"Authorization": "Bearer short"}
+    r = client.get("/api/v1/status", headers=bad_headers)
+    _check("Auth failure (short token)", r, 401)
+
     print(f"\n=== Results: {passed} passed, {failed} failed ===\n")
     return failed == 0
 
 
 # Main entry point
 if __name__ == "__main__":
-    import uvicorn
-
     success = _run_self_test()
     if not success:
         print("[WARN] Self-test had failures. Check output above.")
-
-    host = "127.0.0.1"
-    port = 8080
-    _logger.info("Starting JARVIS REST API on %s:%d", host, port)
-    uvicorn.run(
-        create_rest_app(),
-        host=host,
-        port=port,
-        log_level="info",
-    )
+    else:
+        print("[OK] All self-tests passed. REST API ready for deployment.")

@@ -18,3 +18,7 @@ pycaw
 comtypes
 pywin32
 cryptography
+pyttsx3
+pytest
+pyttsx3
+pytest
