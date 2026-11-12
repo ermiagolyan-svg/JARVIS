@@ -67,7 +67,10 @@ public partial class MainWindow : Window
     private bool _isMuted;
     private string _currentState = "IDLE";
     private string? _activePendingActionId;
+    private bool _testRedAlertMode; // F9 Toggle for testing Red Alert state
     private string _lastSeenWsMessage = string.Empty;
+
+    private bool IsRedAlertActive => _testRedAlertMode || !string.IsNullOrWhiteSpace(_activePendingActionId);
 
     // Slide-out drawer states
     private bool _leftOpen;
@@ -80,6 +83,8 @@ public partial class MainWindow : Window
     private readonly SolidColorBrush _frostWhiteBrush = new((Color)ColorConverter.ConvertFromString("#F8FAFC"));
     private readonly SolidColorBrush _amberGlitchBrush = new((Color)ColorConverter.ConvertFromString("#F59E0B"));
     private readonly SolidColorBrush _crimsonCoreBrush = new((Color)ColorConverter.ConvertFromString("#F43F5E"));
+    private readonly SolidColorBrush _crimsonBrightBrush = new((Color)ColorConverter.ConvertFromString("#FF2A55"));
+    private readonly SolidColorBrush _crimsonDeepBrush = new((Color)ColorConverter.ConvertFromString("#BE123C"));
 
     // Theme 2 (Transparent LCD White/Black High-Contrast) Brushes
     private readonly SolidColorBrush _lcdPitchBlackBrush = new((Color)ColorConverter.ConvertFromString("#000000"));
@@ -222,31 +227,50 @@ public partial class MainWindow : Window
 
     private void UpdateSphereThemeBrushes()
     {
+        bool isRedAlert = IsRedAlertActive;
+
         if (_outerOrbitRing != null)
         {
-            _outerOrbitRing.Stroke = _isLightLcdTheme ? _lcdPitchBlackBrush : _iceBlueBrush;
-            _outerOrbitRing.StrokeThickness = _isLightLcdTheme ? 1.6 : 1.0;
-            _outerOrbitRing.Opacity = _isLightLcdTheme ? 0.55 : 0.22;
+            _outerOrbitRing.Stroke = isRedAlert
+                ? _crimsonCoreBrush
+                : (_isLightLcdTheme ? _lcdPitchBlackBrush : _iceBlueBrush);
+            _outerOrbitRing.StrokeThickness = isRedAlert ? 1.8 : (_isLightLcdTheme ? 1.6 : 1.0);
+            _outerOrbitRing.Opacity = isRedAlert ? 0.75 : (_isLightLcdTheme ? 0.55 : 0.22);
         }
 
         if (_innerOrbitRing != null)
         {
-            _innerOrbitRing.Stroke = _isLightLcdTheme ? _lcdPitchBlackBrush : _quantumCyanBrush;
-            _innerOrbitRing.StrokeThickness = _isLightLcdTheme ? 1.5 : 1.0;
-            _innerOrbitRing.Opacity = _isLightLcdTheme ? 0.45 : 0.18;
+            _innerOrbitRing.Stroke = isRedAlert
+                ? _crimsonDeepBrush
+                : (_isLightLcdTheme ? _lcdPitchBlackBrush : _quantumCyanBrush);
+            _innerOrbitRing.StrokeThickness = isRedAlert ? 1.6 : (_isLightLcdTheme ? 1.5 : 1.0);
+            _innerOrbitRing.Opacity = isRedAlert ? 0.65 : (_isLightLcdTheme ? 0.45 : 0.18);
         }
 
         foreach (var line in _synapseLines)
         {
-            line.Stroke = _isLightLcdTheme ? _lcdPitchBlackBrush : _quantumCyanBrush;
-            line.StrokeThickness = _isLightLcdTheme ? 1.25 : 0.85;
+            if (isRedAlert)
+            {
+                line.Stroke = _isLightLcdTheme ? _crimsonDeepBrush : _crimsonCoreBrush;
+                line.StrokeThickness = _isLightLcdTheme ? 1.55 : 1.25;
+            }
+            else
+            {
+                line.Stroke = _isLightLcdTheme ? _lcdPitchBlackBrush : _quantumCyanBrush;
+                line.StrokeThickness = _isLightLcdTheme ? 1.25 : 0.85;
+            }
         }
 
         foreach (var s in _stars)
         {
-            if (_isLightLcdTheme)
+            if (isRedAlert)
             {
-                // Pitch Black & Deep Carbon dots for maximum opacity on Transparent LCD
+                s.Dot.Fill = s.ColorTier == 0
+                    ? _crimsonBrightBrush
+                    : (s.ColorTier == 1 ? _crimsonCoreBrush : _crimsonDeepBrush);
+            }
+            else if (_isLightLcdTheme)
+            {
                 s.Dot.Fill = s.ColorTier == 0
                     ? _lcdPitchBlackBrush
                     : (s.ColorTier == 1 ? _lcdPitchBlackBrush : _lcdDeepCarbonBrush);
@@ -286,6 +310,18 @@ public partial class MainWindow : Window
         {
             e.Handled = true;
             ToggleLcdTheme();
+        }
+        else if (e.Key == Key.F9)
+        {
+            e.Handled = true;
+            _testRedAlertMode = !_testRedAlertMode;
+            SecurityBanner.Visibility = IsRedAlertActive ? Visibility.Visible : Visibility.Collapsed;
+            if (_testRedAlertMode && string.IsNullOrWhiteSpace(_activePendingActionId))
+            {
+                TxtPendingActionDetails.Text = "[SENSITIVE] TEST_RED_ALERT — منتظر دستور یا تایید نهایی شما...";
+            }
+            UpdateSphereThemeBrushes();
+            ApplySystemStatus(_currentState, true, "Qwen 3.5 9B", false, _isMuted, "local", TxtPairingPin.Text);
         }
         else if (e.Key == Key.Escape && _isFullScreen)
         {
@@ -430,7 +466,7 @@ public partial class MainWindow : Window
         Canvas.SetTop(_innerOrbitRing, cy - 260);
         CosmicSphereCanvas.Children.Add(_innerOrbitRing);
 
-        // 2. Concentric Expanding Wave Rings (Visible during LISTENING / SPEAKING)
+        // 2. Concentric Expanding Wave Rings (Visible during LISTENING / SPEAKING / RED ALERT)
         for (int w = 0; w < 3; w++)
         {
             var ring = new Ellipse
@@ -471,7 +507,6 @@ public partial class MainWindow : Window
             double by = Math.Sin(theta) * Math.Sin(phi);
             double bz = Math.Cos(phi);
 
-            // Larger particle sizes (2.8px to 5.6px) for strong visibility on Transparent Case LCD
             double size = (i % 9 == 0) ? 5.6 : (i % 3 == 0 ? 4.0 : 2.8);
             int colorTier = (i % 7 == 0) ? 0 : (i % 3 == 0 ? 1 : 2);
 
@@ -503,21 +538,29 @@ public partial class MainWindow : Window
         double cx = CosmicSphereCanvas.Width * 0.5;
         double cy = CosmicSphereCanvas.Height * 0.5;
 
+        bool isRedAlert = IsRedAlertActive;
         bool isListening = !_isMuted && _currentState.Contains("LISTEN");
         bool isSpeaking = !_isMuted && _currentState.Contains("SPEAK");
         bool isThinking = !_isMuted && _currentState.Contains("THINK");
 
         // Orbital rings counter-rotation
-        if (_outerOrbitRotate != null) _outerOrbitRotate.Angle = (_outerOrbitRotate.Angle + (isThinking ? 0.45 : 0.12)) % 360.0;
-        if (_innerOrbitRotate != null) _innerOrbitRotate.Angle = (_innerOrbitRotate.Angle - (isSpeaking ? 0.55 : 0.18)) % 360.0;
+        if (_outerOrbitRotate != null)
+            _outerOrbitRotate.Angle = (_outerOrbitRotate.Angle + (isRedAlert ? 0.65 : (isThinking ? 0.45 : 0.12))) % 360.0;
+        if (_innerOrbitRotate != null)
+            _innerOrbitRotate.Angle = (_innerOrbitRotate.Angle - (isRedAlert ? 0.75 : (isSpeaking ? 0.55 : 0.18))) % 360.0;
 
         // Rotation speed & target radius
-        double rotSpeed = isThinking ? 0.022 : (isSpeaking ? 0.012 : (isListening ? 0.009 : 0.0045));
+        double rotSpeed = isRedAlert ? 0.016 : (isThinking ? 0.022 : (isSpeaking ? 0.012 : (isListening ? 0.009 : 0.0045)));
         _rotY += rotSpeed;
         _rotX = Math.Sin(_phaseTime * 0.25) * 0.28;
 
         double targetRadius = 220.0;
-        if (isSpeaking)
+        if (isRedAlert)
+        {
+            // Heartbeat pulse when awaiting user confirmation for critical commands
+            targetRadius = 224.0 + Math.Sin(_phaseTime * 5.2) * 15.0 + Math.Cos(_phaseTime * 10.4) * 6.0;
+        }
+        else if (isSpeaking)
         {
             double beat = Math.Sin(_phaseTime * 3.4) * 24.0 + Math.Sin(_phaseTime * 6.8) * 10.0;
             double rmsBoost = Math.Clamp(_currentRms * 135.0, 12.0, 75.0);
@@ -534,23 +577,35 @@ public partial class MainWindow : Window
 
         _currentRadius += (targetRadius - _currentRadius) * 0.18;
 
-        // Update Listening Ripple Waves
+        // Update Expanding Ripple Waves
         for (int w = 0; w < _listeningWaves.Count; w++)
         {
             var ring = _listeningWaves[w];
-            if (isListening || isSpeaking)
+            if (isRedAlert || isListening || isSpeaking)
             {
-                double waveProgress = ((_phaseTime * 0.45) + (w * 0.33)) % 1.0;
+                double waveSpeed = isRedAlert ? 0.60 : 0.45;
+                double waveProgress = ((_phaseTime * waveSpeed) + (w * 0.33)) % 1.0;
                 double waveRadius = _currentRadius * (0.85 + waveProgress * 0.75);
                 double diameter = waveRadius * 2.0;
                 ring.Width = diameter;
                 ring.Height = diameter;
                 Canvas.SetLeft(ring, cx - waveRadius);
                 Canvas.SetTop(ring, cy - waveRadius);
-                double baseWaveAlpha = _isLightLcdTheme ? 0.85 : (isListening ? 0.55 : 0.30);
-                ring.Opacity = (1.0 - waveProgress) * baseWaveAlpha;
-                ring.Stroke = _isLightLcdTheme ? _lcdPitchBlackBrush : (isListening ? _quantumCyanBrush : _iceBlueBrush);
-                ring.StrokeThickness = _isLightLcdTheme ? 2.4 : 1.8;
+
+                if (isRedAlert)
+                {
+                    double alertAlpha = _isLightLcdTheme ? 0.90 : 0.70;
+                    ring.Opacity = (1.0 - waveProgress) * alertAlpha;
+                    ring.Stroke = _isLightLcdTheme ? _crimsonDeepBrush : _crimsonCoreBrush;
+                    ring.StrokeThickness = _isLightLcdTheme ? 2.6 : 2.2;
+                }
+                else
+                {
+                    double baseWaveAlpha = _isLightLcdTheme ? 0.85 : (isListening ? 0.55 : 0.30);
+                    ring.Opacity = (1.0 - waveProgress) * baseWaveAlpha;
+                    ring.Stroke = _isLightLcdTheme ? _lcdPitchBlackBrush : (isListening ? _quantumCyanBrush : _iceBlueBrush);
+                    ring.StrokeThickness = _isLightLcdTheme ? 2.4 : 1.8;
+                }
             }
             else
             {
@@ -567,7 +622,12 @@ public partial class MainWindow : Window
         {
             double localR = _currentRadius;
 
-            if (isListening)
+            if (isRedAlert)
+            {
+                double alertRipple = Math.Sin(s.BaseX * 6.0 + s.BaseY * 6.0 - _phaseTime * 6.5) * 9.0;
+                localR += alertRipple;
+            }
+            else if (isListening)
             {
                 double ripple = Math.Sin(s.BaseY * 7.0 - _phaseTime * 4.2) * (12.0 + _currentRms * 40.0);
                 localR += ripple;
@@ -597,13 +657,17 @@ public partial class MainWindow : Window
             s.ScreenY = sy;
             s.Depth = depth;
 
-            double twinkle = 0.88 + 0.12 * Math.Sin(_phaseTime * 2.2 + s.PhaseOffset);
-            double minAlpha = _isLightLcdTheme ? 0.25 : 0.08;
-            double alphaBoost = _isLightLcdTheme ? 0.62 : 0.46;
+            double twinkle = 0.88 + 0.12 * Math.Sin(_phaseTime * (isRedAlert ? 5.5 : 2.2) + s.PhaseOffset);
+            double minAlpha = isRedAlert ? 0.30 : (_isLightLcdTheme ? 0.25 : 0.08);
+            double alphaBoost = isRedAlert ? 0.68 : (_isLightLcdTheme ? 0.62 : 0.46);
             double alpha = Math.Clamp(((depth + 1.18) * alphaBoost) * twinkle, minAlpha, 1.0);
 
             double dotScale = Math.Clamp((depth + 1.55) * 0.58, 0.50, 1.55) * lcdScaleBoost;
-            if (isSpeaking)
+            if (isRedAlert)
+            {
+                dotScale *= 1.15;
+            }
+            else if (isSpeaking)
             {
                 dotScale *= 1.0 + Math.Clamp(_currentRms * 0.45, 0.05, 0.35);
             }
@@ -617,22 +681,35 @@ public partial class MainWindow : Window
         }
 
         // Update Neural Synapse Web between neighboring front-facing stars
+        double depthThreshold = isRedAlert ? 0.04 : 0.12;
+        double alertPulse = isRedAlert ? (0.78 + 0.22 * Math.Sin(_phaseTime * 6.0)) : 1.0;
+
         for (int i = 0; i < SynapseCount; i++)
         {
             var line = _synapseLines[i];
             var a = _stars[(i * 8) % StarCount];
             var b = _stars[(i * 8 + 1) % StarCount];
 
-            if (a.Depth > 0.12 && b.Depth > 0.12)
+            if (a.Depth > depthThreshold && b.Depth > depthThreshold)
             {
                 line.X1 = a.ScreenX;
                 line.Y1 = a.ScreenY;
                 line.X2 = b.ScreenX;
                 line.Y2 = b.ScreenY;
-                double baseOpacity = _isLightLcdTheme
-                    ? ((isThinking || isSpeaking) ? 0.65 : 0.35)
-                    : ((isThinking || isSpeaking) ? 0.32 : 0.14);
-                line.Opacity = Math.Min(a.Depth, b.Depth) * baseOpacity;
+
+                double baseOpacity;
+                if (isRedAlert)
+                {
+                    baseOpacity = (_isLightLcdTheme ? 0.88 : 0.72) * alertPulse;
+                }
+                else
+                {
+                    baseOpacity = _isLightLcdTheme
+                        ? ((isThinking || isSpeaking) ? 0.65 : 0.35)
+                        : ((isThinking || isSpeaking) ? 0.32 : 0.14);
+                }
+
+                line.Opacity = Math.Clamp(Math.Min(a.Depth, b.Depth) * baseOpacity, 0.0, 1.0);
             }
             else
             {
@@ -706,6 +783,9 @@ public partial class MainWindow : Window
 
     private async Task PollBackendSubsystemsAsync()
     {
+        var pending = await _client.GetPendingConfirmationsAsync();
+        UpdatePendingConfirmationsBanner(pending);
+
         var status = await _client.GetStatusAsync();
         if (status != null)
         {
@@ -724,9 +804,6 @@ public partial class MainWindow : Window
         {
             ApplyTelemetry(telemetry);
         }
-
-        var pending = await _client.GetPendingConfirmationsAsync();
-        UpdatePendingConfirmationsBanner(pending);
     }
 
     private void HandleWsConnectionState(bool connected)
@@ -777,14 +854,21 @@ public partial class MainWindow : Window
         _currentState = string.IsNullOrWhiteSpace(state) ? "IDLE" : state.ToUpperInvariant();
         _isMuted = muted;
 
-        TxtSystemState.Text = _isMuted ? "MUTED" : _currentState;
+        bool isRedAlert = IsRedAlertActive;
+        TxtSystemState.Text = isRedAlert ? "AWAITING AUTH" : (_isMuted ? "MUTED" : _currentState);
         TxtPairingPin.Text = string.IsNullOrWhiteSpace(pairingPin) ? "------" : pairingPin;
 
         Brush activeAccent = _isLightLcdTheme ? _lcdPitchBlackBrush : _quantumCyanBrush;
         Brush idleAccent = _isLightLcdTheme ? _lcdPitchBlackBrush : _iceBlueBrush;
 
         Brush stateBrush = idleAccent;
-        if (_isMuted)
+        if (isRedAlert)
+        {
+            stateBrush = _crimsonCoreBrush;
+            HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#48F43F5E");
+            TxtReactorSubtitle.Text = "⚠ CRITICAL COMMAND PENDING // منتظر تایید دستور حساس توسط شما...";
+        }
+        else if (_isMuted)
         {
             stateBrush = _crimsonCoreBrush;
             HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#22F43F5E");
@@ -856,6 +940,8 @@ public partial class MainWindow : Window
 
     private void UpdatePendingConfirmationsBanner(List<PendingConfirmationItem> pending)
     {
+        bool wasRedAlert = IsRedAlertActive;
+
         if (pending.Count > 0)
         {
             var first = pending[0];
@@ -866,7 +952,16 @@ public partial class MainWindow : Window
         else
         {
             _activePendingActionId = null;
-            SecurityBanner.Visibility = Visibility.Collapsed;
+            if (!_testRedAlertMode)
+            {
+                SecurityBanner.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        if (wasRedAlert != IsRedAlertActive)
+        {
+            UpdateSphereThemeBrushes();
+            ApplySystemStatus(_currentState, true, "Qwen 3.5 9B", false, _isMuted, "local", TxtPairingPin.Text);
         }
     }
 
@@ -974,6 +1069,14 @@ public partial class MainWindow : Window
 
     private async void BtnApproveAction_Click(object sender, RoutedEventArgs e)
     {
+        if (_testRedAlertMode && string.IsNullOrWhiteSpace(_activePendingActionId))
+        {
+            _testRedAlertMode = false;
+            SecurityBanner.Visibility = Visibility.Collapsed;
+            UpdateSphereThemeBrushes();
+            ApplySystemStatus(_currentState, true, "Qwen 3.5 9B", false, _isMuted, "local", TxtPairingPin.Text);
+            return;
+        }
         if (string.IsNullOrWhiteSpace(_activePendingActionId)) return;
         string id = _activePendingActionId;
         await _client.ConfirmSecurityActionAsync(id, true);
@@ -984,6 +1087,14 @@ public partial class MainWindow : Window
 
     private async void BtnRejectAction_Click(object sender, RoutedEventArgs e)
     {
+        if (_testRedAlertMode && string.IsNullOrWhiteSpace(_activePendingActionId))
+        {
+            _testRedAlertMode = false;
+            SecurityBanner.Visibility = Visibility.Collapsed;
+            UpdateSphereThemeBrushes();
+            ApplySystemStatus(_currentState, true, "Qwen 3.5 9B", false, _isMuted, "local", TxtPairingPin.Text);
+            return;
+        }
         if (string.IsNullOrWhiteSpace(_activePendingActionId)) return;
         string id = _activePendingActionId;
         await _client.ConfirmSecurityActionAsync(id, false);
