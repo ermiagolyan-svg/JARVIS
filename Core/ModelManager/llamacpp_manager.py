@@ -87,7 +87,9 @@ class LlamaCppManager:
         Falls back to default if not specified in config.
         """
         args = [
-            model_path,
+            '-m', str(model_path),
+            '--host', str(self.host),
+            '--port', str(self.port),
             '-ngl', str(self._config.get('n_gpu_layers', 99)),
             '-c', str(self._config.get('context_length', DEFAULT_CONTEXT_LENGTH)),
             '-fa', 'on' if self._config.get('flash_attn', True) else 'off',
@@ -102,7 +104,7 @@ class LlamaCppManager:
         # Optional: kv_cache_type
         kv_cache = self._config.get('kv_cache_type')
         if kv_cache:
-            args += ['--cache-type-kv', kv_cache]
+            args += ['-ctk', str(kv_cache), '-ctv', str(kv_cache)]
 
         return args
 
@@ -233,7 +235,7 @@ class LlamaCppManager:
 
         # Build command line using _build_server_args (reads context_length from config)
         args = self._build_server_args(model_path)
-        cmd = [binary_path] + args + ['--host', self.host, '--port', str(self.port)]
+        cmd = [binary_path] + args
 
         print('[LlamaCppManager] Launching: {} ...'.format(
             ' '.join(cmd[:5]) + ('...' if len(cmd) > 5 else '')
@@ -439,6 +441,7 @@ ModelManager = LlamaCppManager
 
 # ---------------------------------------------------------------------------
 # Self-test: run via `python -m Core.ModelManager.llamacpp_manager`
+# Non-blocking: verifies command construction WITHOUT spawning llama-server.exe
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
     print('=== LlamaCppManager Self-Test ===')
@@ -450,26 +453,33 @@ if __name__ == '__main__':
     print('[TEST] Port:', manager.port)
     print('[TEST] Base URL:', manager.base_url)
 
-    # Test 2: Server status check (non-blocking, just probes endpoint)
+    # Test 2: Verify -m flag is present in _build_server_args output
+    test_model = 'D:/AI/Models/test-model.gguf'
+    args = manager._build_server_args(test_model)
+    assert '-m' in args, 'FAIL: -m flag missing from command args'
+    m_idx = args.index('-m')
+    assert args[m_idx + 1] == test_model, 'FAIL: model path not after -m flag'
+    print('[TEST] _build_server_args OK: -m flag present before model path')
+    print('[TEST] Full args:', ' '.join(args[:8]) + ('...' if len(args) > 8 else ''))
+
+    # Test 3: Verify --host and --port are in the args
+    assert '--host' in args, 'FAIL: --host flag missing'
+    assert '--port' in args, 'FAIL: --port flag missing'
+    host_idx = args.index('--host')
+    port_idx = args.index('--port')
+    assert args[host_idx + 1] == manager.host, 'FAIL: wrong host value'
+    assert args[port_idx + 1] == str(manager.port), 'FAIL: wrong port value'
+    print('[TEST] --host/--port flags verified')
+
+    # Test 4: is_server_running() probes /health (non-blocking, just checks connectivity)
     running = manager.is_server_running()
-    print('\n[TEST] Server running?', running)
+    print('\n[TEST] Server running?', running, '(expected False unless llama-server is active)')
 
-    if not running:
-        print('\n[LlamaCppManager WARN] No server detected. Starting one...')
-        success = manager.start_server()
-        if success and not manager.verify_model_ready():
-            print('[LlamaCppManager FAIL] Model failed to load.')
-            exit(1)
+    # Test 5: Verify cmd construction matches expected format
+    expected_prefix = ['-m', str(test_model)]
+    assert args[:2] == expected_prefix, f'FAIL: expected {expected_prefix}, got {args[:2]}'
+    print('[TEST] Command prefix matches expected format:', expected_prefix)
 
-    # Test 3: Recovery simulation (no-op since we just launched it)
-    recovered = manager.recover_connection(max_retries=2)
-    print('\n[TEST] Connection recovery OK:', recovered)
-
-    if __name__ == '__main__':
-        pass  # prevent double-stop on exit in IDE run
-    else:
-        manager.stop_managed_server()
-
-    print('\n=== Self-test complete ===')
+    print('\n=== All self-tests PASSED ===')
 
 
