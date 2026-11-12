@@ -395,6 +395,14 @@ def create_rest_app() -> FastAPI:
         _telemetry_incr()
         return {"entries": [AuditEntry(**e).model_dump() for e in _audit_log]}
 
+    # ---------------------------------------------------------------------------
+    # WebSocket routes — mounted on the same app (port 8765)
+    # ---------------------------------------------------------------------------
+    from Network.WebSocket.ws_server import JarvisWebSocketManager
+
+    _ws_mgr = JarvisWebSocketManager(app)
+    app.state.ws_manager = _ws_mgr
+
     return app
 
 
