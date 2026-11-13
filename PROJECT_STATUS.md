@@ -10,3 +10,4 @@
 - Stage 7.1 (Desktop WPF Foundation, Iron Man Holographic Theme, JarvisModels & JarvisBackendClient): COMPLETED & VERIFIED
 - Stage 7.2 (Desktop WPF Holographic HUD, Animated Concentric Arc Reactor, Live RMS Visualizer, Telemetry & RTL Persian Chat): COMPLETED & VERIFIED
 - Stage 7.3 (Desktop WPF Management Tabs: Voice/DSP Config, SQLite Facts CRUD, Security Audit/Startup Toggle & Live Logs): COMPLETED & VERIFIED
+- **Bug Fix (2026-11-12):** `jarvis_main.py` production path never started uvicorn on port 8765. Added `import uvicorn` + `uvicorn.run()` call in `_step9_ready_report()`. Also added health watchdog thread startup before the blocking `uvicorn.run()`.

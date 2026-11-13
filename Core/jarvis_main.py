@@ -11,6 +11,7 @@ import ctypes
 import logging
 import threading
 import time
+import uvicorn
 
 from fastapi.testclient import TestClient
 
@@ -224,7 +225,7 @@ class JarvisMasterService:
             self.logger.info("DRY-RUN COMPLETE — no server started")
             sys.exit(0)
         else:
-            # Production: print TTS readiness message
+            # Production: print TTS readiness message then start uvicorn server
             if self.tts_engine and hasattr(self.tts_engine, 'is_ready'):
                 ready = self.tts_engine.is_ready()
             else:
@@ -233,6 +234,19 @@ class JarvisMasterService:
                 self.logger.info("سیستم جارویس آماده به کار است")
             else:
                 self.logger.warning("TTS not yet ready — health watchdog will retry")
+
+            # Start the REST API server on port 8765
+            host = self.config.get("network", "host", "0.0.0.0")
+            port = self.config.get("network", "port", 8765)
+            self.logger.info(f"Starting REST API server on {host}:{port}")
+
+            # Start health watchdog thread BEFORE uvicorn (uvicorn.run is blocking)
+            if hasattr(self, '_health_watchdog') and callable(getattr(self, '_health_watchdog')):
+                watchdog_thread = threading.Thread(target=self._health_watchdog, args=(10,), daemon=True)
+                watchdog_thread.start()
+                self.logger.info("Health watchdog thread started")
+
+            uvicorn.run(self.app, host=host, port=port, log_level="info")
 
     # --- Initialize Pipeline ---
     def initialize(self) -> bool:
