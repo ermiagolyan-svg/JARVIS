@@ -282,7 +282,7 @@ class JarvisMasterService:
             except Exception as e:
                 self.logger.error(f"Failed to stop voice orchestrator: {e}")
 
-        if self.stt_engine:
+        if self.stt_engine and hasattr(self.stt_engine, 'close'):
             try:
                 self.stt_engine.close()
             except Exception as e:
@@ -310,7 +310,7 @@ class JarvisMasterService:
             try:
                 if hasattr(self, 'app') and self.app is not None:
                     client = TestClient(self.app)
-                    resp = client.get("/health")
+                    resp = client.get("/api/v1/health")
                     if resp.status_code != 200:
                         self.logger.warning(f"Health check failed: {resp.status_code}")
                 else:

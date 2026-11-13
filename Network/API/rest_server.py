@@ -7,8 +7,14 @@ import json
 import logging
 import secrets
 import threading
-from enum import IntEnum
 from pathlib import Path
+
+# Ensure project root is in Python path for imports like `from Network.WebSocket...`
+_project_root = Path(__file__).resolve().parents[2]
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+from enum import IntEnum
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, Request, Response, HTTPException, status
@@ -155,8 +161,13 @@ class TelemetryResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1)
-    context: Optional[str] = None
+    message: Optional[str] = Field(default=None, description="Message text (legacy)")
+    text: Optional[str] = Field(default=None, description="Message text (C# client)")
+    source: Optional[str] = Field(default="desktop", description="Source of the message")
+    provider: Optional[str] = Field(default=None, description="Provider name")
+
+    def get_message(self) -> str:
+        return self.text or self.message or ""
 
 
 class ChatResponse(BaseModel):
@@ -247,7 +258,7 @@ def create_rest_app() -> FastAPI:
     @app.middleware("http")
     async def token_middleware(request: Request, call_next):
         protected_paths = ["/api/v1/"]
-        exempt_paths = ["/api/v1/pair", "/api/v1/health"]
+        exempt_paths = ["/api/v1/pair", "/api/v1/health", "/ws/lumia", "/ws/desktop"]
         if any(request.url.path.startswith(p) for p in protected_paths):
             if not any(request.url.path.startswith(e) for e in exempt_paths):
                 if not validate_request_token(request):
@@ -267,6 +278,11 @@ def create_rest_app() -> FastAPI:
     @app.get("/api/v1/health", tags=["health"])
     async def api_health():
         return {"status": "healthy", "service": "JARVIS REST API", "version": "1.0.0"}
+
+    # Health alias — also accept /health (no /api/v1 prefix) for compatibility
+    @app.get("/health", tags=["health"])
+    async def api_health_alias():
+        return {"status": "ok", "service": "JARVIS REST API", "version": "1.0.0"}
 
     # --- Pairing ---
     @app.post("/api/v1/pair", tags=["pairing"], response_model=PairResponse)
@@ -335,6 +351,85 @@ def create_rest_app() -> FastAPI:
         return VoiceConfigRequest(**_voice_config).model_dump()
 
 
+    # --- Memory history (conversation log) ---
+    @app.get("/api/v1/memory/history", tags=["memory"])
+    async def api_memory_history(request: Request):
+        _telemetry_incr()
+        from Core.Conversation.dialogue_manager import DialogueManager
+        try:
+            dm = DialogueManager.get_instance()
+            items = dm.get_messages() if hasattr(dm, 'get_messages') else []
+            return {"messages": items}
+        except Exception:
+            return {"messages": []}
+
+    @app.delete("/api/v1/memory/history", tags=["memory"])
+    async def api_memory_history_clear(request: Request):
+        _telemetry_incr()
+        from Core.Conversation.dialogue_manager import DialogueManager
+        try:
+            dm = DialogueManager.get_instance()
+            if hasattr(dm, 'clear'):
+                dm.clear()
+            return {"cleared": True}
+        except Exception:
+            raise HTTPException(status_code=500, detail="Failed to clear history")
+
+    # --- Memory facts (key-value store) ---
+    _facts_store: Dict[str, Any] = {}
+
+    @app.get("/api/v1/memory/facts", tags=["memory"])
+    async def api_memory_facts():
+        return {"facts": [dict(f) for f in _facts_store.values()]}
+
+    @app.post("/api/v1/memory/facts", tags=["memory"])
+    async def api_memory_fact_create(body: MemoryCreateRequest):
+        _telemetry_incr()
+        fact_id = len(_facts_store) + 1
+        item = {"id": fact_id, "key": body.key, "value": body.value, "metadata": body.metadata, "created_at": _now_str()}
+        _facts_store[body.key] = item
+        return MemoryItem(**item).model_dump()
+
+    @app.delete("/api/v1/memory/facts/{fact_key}", tags=["memory"])
+    async def api_memory_fact_delete(fact_key: str):
+        _telemetry_incr()
+        if fact_key not in _facts_store:
+            raise HTTPException(status_code=404, detail=f"Fact key '{fact_key}' not found")
+        item = _facts_store.pop(fact_key)
+        return {"deleted": True, "item": MemoryItem(**item).model_dump()}
+
+    # --- Voice config POST alias ---
+    @app.post("/api/v1/voice/config", tags=["voice"])
+    async def api_voice_config_post(request: Request):
+        _telemetry_incr()
+        data = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        if "mute" in data:
+            _voice_config["mute"] = data["mute"]
+        if "volume" in data:
+            _voice_config["volume"] = data["volume"]
+        if "engine" in data:
+            _voice_config["engine"] = data["engine"]
+        if "language" in data:
+            _voice_config["language"] = data["language"]
+        return VoiceConfigRequest(**_voice_config).model_dump()
+
+    # --- Logs endpoint ---
+    @app.get("/api/v1/logs", tags=["logs"])
+    async def api_logs():
+        _telemetry_incr()
+        log_dir = Path(r"D:\AI\JARVIS\Logs")
+        logs: List[Dict[str, Any]] = []
+        if log_dir.exists():
+            for f in sorted(log_dir.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True)[:200]:
+                if f.suffix == ".log" and f.name != "ws_server.log":
+                    try:
+                        content = f.read_text(encoding="utf-8", errors="replace")
+                        lines = content.strip().splitlines()[-50:]
+                        logs.append({"file": f.name, "last_lines": lines})
+                    except Exception:
+                        pass
+        return {"logs": logs}
+
     # --- Memory CRUD ---
     @app.get("/api/v1/memory/{key}", tags=["memory"])
     async def api_memory_get(key: str):
@@ -395,6 +490,29 @@ def create_rest_app() -> FastAPI:
         _telemetry_incr()
         return {"entries": [AuditEntry(**e).model_dump() for e in _audit_log]}
 
+    # --- Short aliases for security routes ---
+    @app.get("/api/v1/security/pending", tags=["security"])
+    async def api_security_pending_alias(request: Request):
+        _telemetry_incr()
+        return {"items": [SecurityPendingItem(**s).model_dump() for s in _pending_security if s["status"] == "pending"]}
+
+    @app.post("/api/v1/security/confirm", tags=["security"])
+    async def api_security_confirm_alias(request: Request):
+        _telemetry_incr()
+        data = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        item_id = data.get("item_id", 0)
+        for s in _pending_security:
+            if s["id"] == item_id and s["status"] == "pending":
+                s["status"] = "confirmed"
+                _audit_log.append({"id": len(_audit_log) + 1, "timestamp": _now_str(), "level": "info", "message": f"Audit item {item_id} confirmed", "result": "success"})
+                return {"status": "confirmed"}
+        raise HTTPException(status_code=404, detail="Pending audit item not found")
+
+    @app.get("/api/v1/security/audit", tags=["security"])
+    async def api_security_audit_alias(request: Request):
+        _telemetry_incr()
+        return {"entries": [AuditEntry(**e).model_dump() for e in _audit_log]}
+
     # ---------------------------------------------------------------------------
     # WebSocket routes — mounted on the same app (port 8765)
     # ---------------------------------------------------------------------------
@@ -440,9 +558,13 @@ def _run_self_test() -> bool:
     r = client.get("/api/v1/telemetry", headers=headers)
     _check("GET /telemetry", r, 200)
 
-    # 5. chat
+    # 5. chat (legacy message field)
     r = client.post("/api/v1/chat", json={"message": "Hello JARVIS"}, headers=headers)
-    _check("POST /chat", r, 200)
+    _check("POST /chat (message)", r, 200)
+
+    # 5b. chat (C# client sends 'text' field)
+    r = client.post("/api/v1/chat", json={"text": "Hello from C#"}, headers=headers)
+    _check("POST /chat (text alias)", r, 200)
 
     # 6. voice mute toggle
     r = client.post("/api/v1/voice/mute", json={"mute": True}, headers=headers)
@@ -467,6 +589,38 @@ def _run_self_test() -> bool:
     # 11. security audit
     r = client.get("/api/v1/security/audit/log", headers=headers)
     _check("GET /security/audit/log", r, 200)
+
+    # 12. health alias
+    r = client.get("/health")
+    _check("GET /health (alias)", r, 200)
+
+    # 13. security/pending alias
+    r = client.get("/api/v1/security/pending", headers=headers)
+    _check("GET /security/pending", r, 200)
+
+    # 14. security/confirm alias
+    r = client.post("/api/v1/security/confirm", json={"item_id": 999}, headers=headers)
+    _check("POST /security/confirm (not found)", r, 404)
+
+    # 15. memory/history
+    r = client.get("/api/v1/memory/history", headers=headers)
+    _check("GET /memory/history", r, 200)
+
+    # 16. memory/facts
+    r = client.post("/api/v1/memory/facts", json={"key": "test_fact", "value": "fact_value"}, headers=headers)
+    _check("POST /memory/facts", r, 200)
+    r = client.get("/api/v1/memory/facts", headers=headers)
+    _check("GET /memory/facts", r, 200)
+    r = client.delete("/api/v1/memory/facts/test_fact", headers=headers)
+    _check("DELETE /memory/facts/{key}", r, 200)
+
+    # 17. voice/config POST
+    r = client.post("/api/v1/voice/config", json={"mute": True, "volume": 80}, headers=headers)
+    _check("POST /voice/config", r, 200)
+
+    # 18. logs
+    r = client.get("/api/v1/logs", headers=headers)
+    _check("GET /logs", r, 200)
 
     # Auth failure test (no token)
     r = client.get("/api/v1/status")

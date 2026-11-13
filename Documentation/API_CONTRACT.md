@@ -116,3 +116,16 @@ Short tokens (< 32 chars) or missing headers return **401 Unauthorized**.
 - All 13 assertions must pass before deployment.
 - Self-test uses `get_master_token()` fallback to config file for token retrieval.
 
+---
+
+## Bug Fixes (2026-11-13)
+
+| # | Bug | Fix |
+|---|-----|-----|
+| 1 | `ChatRequest` dual-field support (`text` + `message`) | Optional fields + `get_message()` helper |
+| 4 | `/health` alias + canonical path in watchdog | `/api/v1/health` canonical, `/health` alias, watchdog updated |
+| 5 | `hasattr` guard on `stt_engine.close()` | `hasattr(stt_engine, 'close')` check before calling |
+| — | Duplicate routes for `/memory/history`, `/memory/facts`, `/voice/config`, `/logs` | Removed; all registered once before parameterized `/memory/{key}` |
+| — | Missing `sys.path` in `ws_server.py` | Added `_project_root` injection (same pattern as `rest_server.py`) |
+| — | WebSocket exempt_paths missing `/ws/desktop` | Added to `exempt_paths` list in token middleware |
+
