@@ -14,3 +14,9 @@
 - **Task 2 (2026-11-14): LLM Client Message Sanitization & DialogueManager Action Security Enforcement** — COMPLETED & VERIFIED.
   - `Core/AI/llm_client.py`: Fixed `_sanitize_messages` fallback so that when only system messages are passed, the system content is used as a user turn (or `"Hello"` if empty), guaranteeing the returned list always starts with at most one `system` message (index 0), alternates `user`/`assistant`, and ends with a `user` message for `llama-server.exe` Jinja template compatibility.
   - `Core/Conversation/dialogue_manager.py`: Imported `get_automation_router`; replaced raw `subprocess.run(cmd, shell=True)` and direct file I/O in `_execute_action` with permission-checked routing through `router.check_permission(...)` + `router.execute(...)`. Denied actions now return a clear Persian denial message (`دسترسی رد شد: ...`). `web_search` remains unchanged via `get_web_search_engine()`.
+  - **System Audit & Bug Fixes (2026-11-17):** 5-Step Prioritized Fix Plan from FULL_SYSTEM_AUDIT COMPLETED & VERIFIED.
+  - Task 1: Fixed Core Service & Memory Manager Return Mismatches (stt_engine.close alias, memory_manager boolean returns).
+  - Task 2: Integrated Live Hardware Telemetry into REST API via HardwareMonitor.
+  - Task 3: Fixed Voice TTS Async Event Loop & Non-Blocking Playback (winsound.SND_ASYNC / Threading).
+  - Task 4: Enforced SecurityPermissionManager in DialogueManager Actions (Routed through AutomationRouter).
+  - Task 5: Synchronized REST Voice Config Updates with Active Orchestrator.

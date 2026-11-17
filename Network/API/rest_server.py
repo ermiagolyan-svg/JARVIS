@@ -1,4 +1,4 @@
-# C.E.L.E.S.T.E. / JARVIS Local HTTP REST & WebSocket API Server (Port 8765)
+﻿# C.E.L.E.S.T.E. / JARVIS Local HTTP REST & WebSocket API Server (Port 8765)
 # Fully synchronized with Desktop/UI/Models/JarvisModels.cs and Documentation/API_CONTRACT.md
 
 import os
@@ -49,11 +49,15 @@ _voice_config: Dict[str, Any] = {
     "mute": False,
     "muted": False,
     "volume": 75,
-    "engine": "piper",
+    "engine_mode": "online",
+    "local_engine": "pocket",
+    "online_provider": "gemini",
+    "online_api_key": "",
+    "online_voice_name": "Kore",
     "language": "fa-IR",
     "pitch_semitones": -0.3,
     "metallic_mix": 0.10,
-    "reverb_decay": 0.10,
+    "reverb_decay": 0.20,
     "wake_threshold": 0.50,
 }
 
@@ -359,7 +363,7 @@ class VoiceConfigRequest(BaseModel):
     muted: Optional[bool] = None
     volume: Optional[int] = Field(None, ge=0, le=100)
     engine_mode: Optional[str] = Field(None, description="'local' or 'online'")
-    local_engine: Optional[str] = Field(None, description="'xtts' or 'piper'")
+    local_engine: Optional[str] = Field(None, description="'xtts' or 'pocket'")
     online_provider: Optional[str] = None
     online_api_key: Optional[str] = None
     online_voice_name: Optional[str] = None
@@ -368,8 +372,6 @@ class VoiceConfigRequest(BaseModel):
     metallic_mix: Optional[float] = None
     reverb_decay: Optional[float] = None
     wake_threshold: Optional[float] = None
-
-
 class MemoryCreateRequest(BaseModel):
     category: Optional[str] = Field(default="user")
     key: str = Field(..., min_length=1)
@@ -547,12 +549,12 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
                 if dm.llm_client and dm.llm_client.get_health_status():
                     reply_text = dm.chat(user_message)
                 else:
-                    reply_text = f"پاسخ تست سلست: {user_message}"
+                    reply_text = f"ظ¾ط§ط³ط® طھط³طھ ط³ظ„ط³طھ: {user_message}"
             else:
-                reply_text = f"پاسخ سلست: {user_message}"
+                reply_text = f"ظ¾ط§ط³ط® ط³ظ„ط³طھ: {user_message}"
         except Exception as e:
             _logger.error("Chat error: %s", e)
-            reply_text = f"خطا در ارتباط با هسته پردازشی سلست: {e}"
+            reply_text = f"ط®ط·ط§ ط¯ط± ط§ط±طھط¨ط§ط· ط¨ط§ ظ‡ط³طھظ‡ ظ¾ط±ط¯ط§ط²ط´غŒ ط³ظ„ط³طھ: {e}"
 
         if not is_test_client:
             raw_tts = getattr(dm, 'last_raw_tts_response', None) or reply_text
@@ -618,15 +620,13 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
         elif "mute" in data:
             _voice_config["muted"] = bool(data["mute"])
 
-        # Update actual config.json to persist engine selection
+        # Correct ConfigManager Key-Value Persistence (Flash Fix 1)
         try:
             from Core.Config.config_loader import get_config
             cfg_mgr = get_config()
-            voice_cfg = cfg_mgr.get("voice", {})
-            for k in ("engine_mode", "local_engine", "online_provider", "online_api_key", "online_voice_name"):
+            for k in ("engine_mode", "local_engine", "online_provider", "online_api_key", "online_voice_name", "pitch_semitones", "metallic_mix", "reverb_decay"):
                 if k in _voice_config:
-                    voice_cfg[k] = _voice_config[k]
-            cfg_mgr.set("voice", voice_cfg)
+                    cfg_mgr.set("voice", k, _voice_config[k])
             cfg_mgr.save()
         except Exception as e:
             _logger.warning("Could not persist voice config: %s", e)
@@ -641,26 +641,20 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
         except Exception:
             pass
 
-        return dict(_voice_config)
-
-        # Apply changes live on the active VoiceOrchestrator if available
-        orch = getattr(request.app.state, "voice_orchestrator", None)
-        if orch is not None and hasattr(orch, "apply_voice_config"):
-            try:
-                orch.apply_voice_config(
-                    pitch_semitones=_voice_config.get("pitch_semitones"),
-                    speech_rate=_voice_config.get("speech_rate"),
-                    metallic_mix=_voice_config.get("metallic_mix"),
-                    reverb_decay=_voice_config.get("reverb_decay"),
-                    muted=_voice_config.get("mute"),
-                    audio_source=_voice_config.get("audio_source"),
-                )
-            except Exception:
-                pass
+        # Trigger Instant Memory Synchronization (Flash Fix 2)
+        engine_mode = _voice_config.get("engine_mode", "online")
+        local_engine = _voice_config.get("local_engine", "pocket")
+        try:
+            orch = getattr(request.app.state, "voice_orchestrator", None)
+            if orch is not None and hasattr(orch, "tts_engine") and hasattr(orch.tts_engine, "force_sync_memory_state"):
+                orch.tts_engine.force_sync_memory_state(engine_mode=engine_mode, local_engine=local_engine)
+            global _tts_engine
+            if _tts_engine is not None and hasattr(_tts_engine, "force_sync_memory_state"):
+                _tts_engine.force_sync_memory_state(engine_mode=engine_mode, local_engine=local_engine)
+        except Exception as e:
+            _logger.warning("Failed to force instant memory sync: %s", e)
 
         return dict(_voice_config)
-
-    # --- Memory History (SQLite + DialogueManager) ---
     @app.get("/api/v1/memory/history", tags=["memory"])
     async def api_memory_history():
         _telemetry_incr()
@@ -1006,7 +1000,7 @@ def _run_self_test() -> bool:
     r_tel = client.get("/api/v1/telemetry", headers=headers)
     _check("GET /telemetry", r_tel, 200)
     print(f"  [INFO] Live Telemetry Snapshot: {r_tel.json()}")
-    r_chat = client.post("/api/v1/chat", json={"text": "سلام سلست"}, headers=headers)
+    r_chat = client.post("/api/v1/chat", json={"text": "ط³ظ„ط§ظ… ط³ظ„ط³طھ"}, headers=headers)
     _check("POST /chat (C# text + spoken_response)", r_chat, 200)
     assert "spoken_response" in r_chat.json(), "Missing spoken_response!"
     _check("POST /voice/mute", client.post("/api/v1/voice/mute", json={"muted": True}, headers=headers), 200)
@@ -1027,3 +1021,4 @@ def _run_self_test() -> bool:
 if __name__ == "__main__":
     if _run_self_test():
         print("[OK] C.E.L.E.S.T.E. REST API & Telemetry 100% synchronized with C# Desktop UI.")
+
