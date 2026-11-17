@@ -358,7 +358,11 @@ class VoiceConfigRequest(BaseModel):
     mute: Optional[bool] = None
     muted: Optional[bool] = None
     volume: Optional[int] = Field(None, ge=0, le=100)
-    engine: Optional[str] = None
+    engine_mode: Optional[str] = Field(None, description="'local' or 'online'")
+    local_engine: Optional[str] = Field(None, description="'xtts' or 'piper'")
+    online_provider: Optional[str] = None
+    online_api_key: Optional[str] = None
+    online_voice_name: Optional[str] = None
     language: Optional[str] = None
     pitch_semitones: Optional[float] = None
     metallic_mix: Optional[float] = None
@@ -599,23 +603,45 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
             data = await request.json()
         except Exception:
             data = {}
-        for k in ("mute", "muted", "volume", "engine", "language", "pitch_semitones", "metallic_mix", "reverb_decay", "wake_threshold"):
+            
+        allowed_keys = (
+            "mute", "muted", "volume", "engine_mode", "local_engine", 
+            "online_provider", "online_api_key", "online_voice_name",
+            "language", "pitch_semitones", "metallic_mix", "reverb_decay", "wake_threshold"
+        )
+        for k in allowed_keys:
             if k in data and data[k] is not None:
                 _voice_config[k] = data[k]
+                
         if "muted" in data:
             _voice_config["mute"] = bool(data["muted"])
         elif "mute" in data:
             _voice_config["muted"] = bool(data["mute"])
+
+        # Update actual config.json to persist engine selection
+        try:
+            from Core.Config.config_loader import get_config
+            cfg_mgr = get_config()
+            voice_cfg = cfg_mgr.get("voice", {})
+            for k in ("engine_mode", "local_engine", "online_provider", "online_api_key", "online_voice_name"):
+                if k in _voice_config:
+                    voice_cfg[k] = _voice_config[k]
+            cfg_mgr.set("voice", voice_cfg)
+            cfg_mgr.save()
+        except Exception as e:
+            _logger.warning("Could not persist voice config: %s", e)
+
         try:
             from Voice.AudioDSP.jarvis_dsp import JarvisAudioDSP
             JarvisAudioDSP.set_global_config(
                 pitch_semitones=_voice_config.get("pitch_semitones"),
                 metallic_mix=_voice_config.get("metallic_mix"),
-                reverb_decay=_voice_config.get("reverb_decay"),
-                speech_rate=_voice_config.get("speech_rate"),
+                reverb_decay=_voice_config.get("reverb_decay")
             )
         except Exception:
             pass
+
+        return dict(_voice_config)
 
         # Apply changes live on the active VoiceOrchestrator if available
         orch = getattr(request.app.state, "voice_orchestrator", None)

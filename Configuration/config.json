@@ -2,15 +2,15 @@
   "system": {
     "project_name": "CELESTE",
     "assistant_name": "C.E.L.E.S.T.E.",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "language": "fa",
     "fallback_language": "en",
     "single_instance_port": 8764
   },
   "llama_cpp": {
     "server_exe_path": "llama-server.exe",
-    "model_gguf_path": "D:/AI/Models/qwen3.5-9b.gguf",
-    "target_model_name": "Qwen 3.5 9B (llama.cpp CUDA 13.5)",
+    "model_gguf_path": "D:/AI/Models/qwen35b-moe.gguf",
+    "target_model_name": "Qwen 35B A3B Q4",
     "host": "127.0.0.1",
     "port": 8080,
     "base_url": "http://127.0.0.1:8080/v1",
@@ -27,15 +27,18 @@
   "voice": {
     "wake_word": "hey_jarvis",
     "threshold": 0.5,
-    "stt_model": "small",
-    "stt_device": "cpu",
-    "stt_compute_type": "int8",
-    "tts_model_path": "Data/Models/piper/fa_IR-gyro-medium.onnx",
-    "sample_rate": 16000,
-    "speech_rate": 1.06,
+    "engine_mode": "online",
+    "online_provider": "gemini",
+    "online_api_key": "AQ.Ab8RN6IlbejJqeSUnU3qyPqPMec2JdkTtPavWykBTzJAZ_y3lg",
+    "online_voice_name": "Kore",
+    "local_engine": "xtts",
+    "xtts_model_path": "Data/Models/xtts/ParsVoice",
+    "xtts_speaker_wav": "Data/Models/xtts/speaker_reference.wav",
+    "sample_rate": 24000,
+    "speech_rate": 1.0,
     "dsp_pitch_semitones": -0.3,
     "dsp_metallic_mix": 0.10,
-    "dsp_reverb_decay": 0.30
+    "dsp_reverb_decay": 0.20
   },
   "network": {
     "host": "0.0.0.0",
