@@ -121,6 +121,10 @@ class STTEngine:
             self._initialized = False
             logger.info("STT engine shut down")
 
+    def close(self) -> None:
+        """Release Whisper resources (delegates to shutdown)."""
+        self.shutdown()
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")

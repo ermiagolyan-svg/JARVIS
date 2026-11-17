@@ -179,9 +179,9 @@ class VoiceOrchestrator:
 
         chime = np.clip(tone1 + tone2, -1.0, 1.0)
 
-        # Apply JARVIS metallic DSP
+        # Apply JARVIS metallic DSP (pass sample_rate=22050 to match chime generation rate)
         from Voice.AudioDSP.jarvis_dsp import JarvisAudioDSP
-        dsp = JarvisAudioDSP(pitch_semitones=-3.0)
+        dsp = JarvisAudioDSP(pitch_semitones=-3.0, sample_rate=self.CHIME_SR)
         chime = dsp.process(chime)
 
         # Play via sounddevice
@@ -234,6 +234,57 @@ class VoiceOrchestrator:
         if self.wake_word_engine:
             self.wake_word_engine.set_muted(False)
         self.set_state(VoiceState.IDLE)
+
+    def apply_voice_config(
+        self,
+        pitch_semitones=None,
+        speech_rate=None,
+        metallic_mix=None,
+        reverb_decay=None,
+        muted=None,
+        audio_source=None,
+    ):
+        '''Apply voice configuration changes live to the active pipeline.
+
+        Updates JarvisAudioDSP global config and, if a TTSEngine instance with
+        a cached _dsp is available, pushes the same config to it immediately.
+        Also handles mute toggle and wake-word audio-source changes.
+        '''
+        # 1) Update global DSP config
+        from Voice.AudioDSP.jarvis_dsp import JarvisAudioDSP
+
+        JarvisAudioDSP.set_global_config(
+            pitch_semitones=pitch_semitones,
+            metallic_mix=metallic_mix,
+            reverb_decay=reverb_decay,
+            speech_rate=speech_rate,
+        )
+
+        # 2) Push to TTSEngine's cached _dsp (if present)
+        if self.tts_engine and hasattr(self.tts_engine, '_dsp') and self.tts_engine._dsp is not None:
+            try:
+                self.tts_engine._dsp.update_config(
+                    pitch_semitones=pitch_semitones,
+                    metallic_mix=metallic_mix,
+                    reverb_decay=reverb_decay,
+                    speech_rate=speech_rate,
+                )
+            except Exception:
+                pass
+
+        # 3) Mute toggle (only if explicitly provided)
+        if muted is not None:
+            if muted:
+                self.mute()
+            else:
+                self.unmute()
+
+        # 4) Wake-word audio-source change
+        if audio_source is not None and self.wake_word_engine is not None:
+            try:
+                self.wake_word_engine.set_audio_source(audio_source)
+            except Exception:
+                pass
 
     def get_status(self) -> dict:
         '''Return pipeline status snapshot.'''

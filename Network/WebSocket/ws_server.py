@@ -6,6 +6,7 @@ import logging
 import math
 import struct
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -165,6 +166,25 @@ class JarvisWebSocketManager:
         return False
 
     def _build_hud_payload(self) -> dict:
+        # Include live hardware telemetry in the HUD
+        hw_telemetry = {}
+        try:
+            from Core.Monitoring.hardware_monitor import HardwareMonitor
+            hm = HardwareMonitor()
+            snap = hm.get_telemetry_snapshot() if hasattr(hm, "get_telemetry_snapshot") else {}
+            if isinstance(snap, dict):
+                hw_telemetry = {
+                    "cpu_percent": float(snap.get("cpu_percent", 0)),
+                    "gpu_percent": float(snap.get("gpu_percent", 0)),
+                    "gpu_temp_c": float(snap.get("gpu_temp_c", 0)),
+                    "vram_used_mb": float(snap.get("vram_used_mb", 0)),
+                    "vram_total_mb": float(snap.get("vram_total_mb", 10240)),
+                    "ram_used_gb": float(snap.get("ram_used_gb", 0)),
+                    "ram_total_gb": float(snap.get("ram_total_gb", 32)),
+                }
+        except Exception:
+            pass
+
         return {
             'type': 'hud_update',
             'state': self._state,
@@ -173,9 +193,19 @@ class JarvisWebSocketManager:
             'model_loaded': self._model_loaded,
             'muted': self._muted,
             'active_mic': self._active_mic,
-            'telemetry': self._telemetry.copy(),
+            'telemetry': hw_telemetry if hw_telemetry else self._telemetry.copy(),
             'pending_confirmations': list(self._pending_confirmations),
             'last_message': self._last_message if isinstance(self._last_message, dict) else {'text': str(self._last_message or '')},
+        }
+
+    def get_state(self) -> dict:
+        """Return current ws_manager state for REST API status endpoint."""
+        return {
+            'state': self._state,
+            'model_loaded': self._model_loaded,
+            'lumia_connected': self._lumia_connected,
+            'muted': self._muted,
+            'active_mic': self._active_mic,
         }
 
     async def broadcast_hud_update(self, exclude_client_id: Optional[str] = None):
@@ -354,8 +384,30 @@ class JarvisWebSocketManager:
         elif cmd == 'text_command':
             text = (payload.get('text') or data.get('text') or '').strip()
             if text:
+                # Call C.E.L.E.S.T.E. DialogueManager for real AI response
+                try:
+                    from Core.Conversation.dialogue_manager import DialogueManager
+                    dm = DialogueManager()
+                    ai_response = dm.chat(text)
+                    self._last_message = {'role': 'assistant', 'text': ai_response}
+                    _logger.info('AI response to text_command: %s', ai_response[:80])
+
+                    # Trigger async TTS playback (non-blocking)
+                    def _tts_play():
+                        try:
+                            from Core.Voice.voice_orchestrator import VoiceOrchestrator
+                            vo = VoiceOrchestrator()
+                            if hasattr(vo, "speak"):
+                                vo.speak(ai_response)
+                        except Exception:
+                            pass
+                    threading.Thread(target=_tts_play, daemon=True).start()
+
+                except Exception as e:
+                    _logger.error('text_command AI failure: %s', e)
+                    self._last_message = {'role': 'assistant', 'text': f'Error: {e}'}
+            else:
                 self._last_message = {'role': 'user', 'text': text}
-                _logger.info('Text command from %s: %s', client_id, text)
             await self.broadcast_hud_update()
 
         else:

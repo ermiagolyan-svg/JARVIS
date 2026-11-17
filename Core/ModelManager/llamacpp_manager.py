@@ -187,7 +187,7 @@ class LlamaCppManager:
                 continue
             for gguf_file in search_dir.rglob('*.gguf'):
                 name_lower = gguf_file.name.lower()
-                if 'qwen' in name_lower and ('9b' in name_lower or '9-b' in name_lower):
+                if 'qwen' in name_lower and ('35b' in name_lower or '9b' in name_lower):
                     return str(gguf_file)
 
         # 3. Last resort: try the config path even if it doesn't exist yet

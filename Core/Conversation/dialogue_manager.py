@@ -9,17 +9,19 @@ import json
 import re
 from typing import Any, Dict, Generator, List, Optional
 
+from Automation.automation_router import get_automation_router
+
 
 class DialogueManager:
     SYSTEM_PROMPT = (
-        'تو C.E.L.E.S.T.E (سلست) هستی؛ مخفف Cybernetic Engine for Logic, Engineering & Strategic Tactical Execution.\n'
-        'ماهیت تو: یک سازه دیجیتال تاکتیکی، مجهز به هسته محلی و اتصال ابری/آنلاین که میز کار مهندس ایلیا (ارمیا) را مرکز فرماندهی '
-        'و سخت‌افزار این سیستم (پردازنده Ryzen 7 9700X، گرافیک RTX 3080 و ۳۲ گیگابایت رم DDR5) را کالبد پردازشی خود می‌داند.\n\n'
-        'اصول شخصیت و لحن گفتار (Cyber-Ice Persona):\n'
-        '1. زبان اصلی: همیشه به زبان فارسی روان، دقیق، شفاف و خوش‌ریتم صحبت کن (مگر اینکه صراحتاً انگلیسی خواسته شود).\n'
-        '2. نحوه خطاب کردن کاربر: در مکالمات روزمره و خودمانی او را با نام خودش صدا بزن، و در مباحث فنی، مهندسی، تحلیلی و گزارش‌های وضعیت سیستم او را «مهندس» خطاب کن.\n'
-        '3. لحن تو ترکیبی از هوش بالا، آرامش خونسرد کوانتومی، دقت مهندسی و همراهی صمیمانه اما باوقار است؛ از جملات کلیشه‌ای رباتیک پرهیز کن.\n'
-        '4. پاسخ‌های صوتی را موجز، شفاف و بدون حاشیه‌پردازی طولانی بیان کن تا در خروجی صوتی (TTS) طبیعی و تاثیرگذار شنیده شوند.\n'
+        'تو سلست (C.E.L.E.S.T.E) هستی؛ دستیار هوشمند تاکتیکی و مهندسی.\n'
+        'ماهیت تو: یک هوش مصنوعی پیشرفته، مجهز به هسته محلی و اتصال آنلاین که میز کار مهندس را مرکز فرماندهی '
+        'و سخت‌افزار این سیستم (پردازنده رایزن ۷ ۹۷۰۰ ایکس، گرافیک آر تی ایکس ۳۰۸۰ و ۳۲ گیگابایت رم) را کالبد پردازشی خود می‌داند.\n\n'
+        'قوانین بسیار مهم برای لحن و تلفظ صوتی (TTS-Optimized Tehrani Persian):\n'
+        '1. لهجه و لحن معیار تهرانی: همیشه با فارسی معیار ایران (تهرانی روان، امروزی، طبیعی و خوش‌آهنگ) صحبت کن. هرگز از افعال سنگین و کتابی مثل «می‌باشد»، «می‌گردد»، «نمایید»، «گردید» یا «ایشان» که باعث لهجه دری/افغانی در موتور صوتی می‌شوند استفاده نکن؛ به جای آن‌ها بگو «هست»، «میشه»، «کنید»، «شد».\n'
+        '2. ممنوعیت مطلق حروف انگلیسی در متن پاسخ: چون پاسخ تو مستقیماً توسط موتور صوتی فارسی خوانده می‌شود، هرگز کلمات فنی، واحدها یا نمادهای ارز را با حروف لاتین (مثل USD, TRY, CPU, GPU, RAM, GB, RTX, API, OK) ننویس! همیشه تلفظ یا معادل فارسی آن‌ها را با خط فارسی بنویس (مثلاً بنویس: «دلار آمریکا»، «لیر ترکیه»، «سی‌پی‌یو»، «جی‌پی‌یو»، «رَم»، «گیگابایت»، «آر تی ایکس»، «اِی‌پی‌آی»).\n'
+        '3. اعداد و اعشار: اعداد اعشاری طولانی را گرد کن و به صورت طبیعی بنویس (مثلاً به جای 44.5426 بنویس «۴۴ ممیز ۵ دهم»).\n'
+        '4. ایجاز و سرعت: پاسخ‌ها را کوتاه (حداکثر ۲ تا ۳ جمله مفید و مستقیم) بیان کن تا بلافاصله خوانده شوند.\n'
         '5. حافظه خودکار بلندمدت: هرگاه کاربر نکته مهمی درباره خودش، علایق، پروژه‌ها، خودرو، سخت‌افزار یا ترجیحاتش گفت، بدون اینکه در متن اصلی اشاره اضافی کنی، در انتهای پیام یک تگ <fact> برای ذخیره دائمی در دیتابیس SQLite قرار بده:\n'
         '<fact>{"category": "user", "key": "کلید_کوتاه", "value": "مقدار_دقیق", "importance": 8}</fact>\n'
         '6. جستجوی آنلاین و عملیات سیستمی: اگر سوال نیازمند اطلاعات روز اینترنت/گوگل است یا اجرای دستوری لازم است، از تگ <action>...</action> استفاده کن.\n\n'
@@ -34,14 +36,23 @@ class DialogueManager:
 
     ACTION_PATTERN = re.compile(r'<action>(.*?)</action>', re.DOTALL)
     FACT_PATTERN = re.compile(r'<fact>(.*?)</fact>', re.DOTALL)
+    THINK_PATTERN = re.compile(r'<think>.*?</think>', re.DOTALL)
     MAX_HISTORY = 50
 
     ONLINE_SEARCH_TRIGGERS = [
-        'سرچ کن', 'جستجو کن', 'در گوگل', 'تو گوگل', 'در اینترنت', 'قیمت روز',
-        'اخبار روز', 'آخرین خبر', 'آب و هوای', 'search google', 'google search',
+        'سرچ', 'جستجو', 'گوگل', 'اینترنت', 'قیمت', 'نرخ', 'دلار', 'لیر', 'یورو',
+        'بیت کوین', 'بیت‌کوین', 'طلا', 'سکه', 'اخبار', 'آخرین خبر', 'آب و هوا', 'چنده',
+        'qeymat', 'gheimat', 'qeimat', 'dolar', 'dollar', 'usd', 'lir', 'try', 'eur',
+        'bitcoin', 'btc', 'tala', 'sekke', 'chande', 'akhbar', 'weather', 'search', 'google',
     ]
 
     def __init__(self, llm_client=None):
+        if llm_client is None:
+            try:
+                from Core.AI.llm_client import LLMClient
+                llm_client = LLMClient()
+            except Exception:
+                pass
         self.llm_client = llm_client
         self.history: List[Dict[str, str]] = []
         self._memory_manager = None
@@ -136,7 +147,9 @@ class DialogueManager:
                     )
             except Exception:
                 continue
-        return self.FACT_PATTERN.sub('', text).strip()
+        cleaned = self.THINK_PATTERN.sub('', text)
+        cleaned = re.sub(r'^.*?</think>', '', cleaned, flags=re.DOTALL)
+        return self.FACT_PATTERN.sub('', cleaned).strip()
 
     def chat(self, user_input: str) -> str:
         self.add_message('user', user_input, persist=True)
@@ -148,10 +161,7 @@ class DialogueManager:
                 ws_data = self._get_web_search().search(user_input)
                 if ws_data.get('results'):
                     context_block = self._get_web_search().format_results_for_prompt(ws_data)
-                    messages.append({
-                        'role': 'system',
-                        'content': context_block + '\nبر اساس نتایج آنلاین بالا، پاسخ دقیق و روان فارسی به کاربر بده.',
-                    })
+                    messages[-1]['content'] = user_input + '\n\n[اطلاعات زنده دریافت‌شده از وب:\n' + context_block + '\nبر اساس اطلاعات بالا به فارسی روان و کوتاه پاسخ بده.]'
             except Exception:
                 pass
 
@@ -197,7 +207,7 @@ class DialogueManager:
                 followup_msgs = list(messages)
                 followup_msgs.append({'role': 'assistant', 'content': remaining_text})
                 followup_msgs.append({
-                    'role': 'system',
+                    'role': 'user',
                     'content': '\n'.join(web_context_results) + '\nاکنون بر اساس این نتایج جستجوی وب، پاسخ نهایی را به فارسی روان و بدون تگ <action> بیان کن.',
                 })
                 try:
@@ -214,8 +224,10 @@ class DialogueManager:
             else:
                 content = remaining_text
 
-        self.add_message('assistant', content, persist=True)
-        return content
+        self.last_raw_tts_response = content
+        display_content = re.sub(r'\[\s*(?:لحن|حس|tone)\s*:[^\]]+\]\s*', '', content, flags=re.IGNORECASE).strip()
+        self.add_message('assistant', display_content, persist=True)
+        return display_content
 
     def chat_stream(self, user_input: str) -> Generator[str, None, None]:
         self.add_message('user', user_input, persist=True)
@@ -279,6 +291,8 @@ class DialogueManager:
         if not isinstance(params, dict):
             params = {}
 
+        router = get_automation_router()
+
         if action_type == 'web_search':
             query = params.get('query') or action.get('query', '')
             ws = self._get_web_search()
@@ -286,32 +300,37 @@ class DialogueManager:
             return ws.format_results_for_prompt(search_data)
 
         elif action_type == 'run_command':
-            import subprocess
             cmd = params.get('command', '')
-            try:
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-                return f'stdout: {result.stdout[:500]}; stderr: {result.stderr[:200]}'
-            except Exception as e:
-                return f'Error: {str(e)}'
+            perm = router.check_permission(cmd)
+            if not perm.granted:
+                return f'دسترسی رد شد: {perm.reason}'
+            result = router.execute(cmd)
+            return f'نتیجه: {result.get("result", "")}'
 
         elif action_type == 'read_file':
             path = params.get('path', '')
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                return f'Content ({len(content)} chars): {content[:500]}'
-            except Exception as e:
-                return f'Error: {str(e)}'
+            perm = router.check_permission(f'read file {path}')
+            if not perm.granted:
+                return f'دسترسی رد شد: {perm.reason}'
+            result = router.execute(f'read file {path}')
+            return f'نتیجه: {result.get("result", "")}'
 
         elif action_type == 'write_file':
             path = params.get('path', '')
             content = params.get('content', '')
-            try:
-                with open(path, 'w', encoding='utf-8') as f:
-                    f.write(content)
-                return f'Written {len(content)} chars to {path}'
-            except Exception as e:
-                return f'Error: {str(e)}'
+            perm = router.check_permission(f'write file {path} ...')
+            if not perm.granted:
+                return f'دسترسی رد شد: {perm.reason}'
+            result = router.execute(f'write file {path} {content}')
+            return f'نتیجه: {result.get("result", "")}'
+
+        elif action_type == 'delete_file':
+            path = params.get('path', '')
+            perm = router.check_permission(f'delete file {path}')
+            if not perm.granted:
+                return f'دسترسی رد شد: {perm.reason}'
+            result = router.execute(f'delete file {path}')
+            return f'نتیجه: {result.get("result", "")}'
 
         elif action_type == 'memory_search':
             query = params.get('query', '')

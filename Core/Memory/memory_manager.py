@@ -21,13 +21,17 @@ class MemoryManager:
         self.retention_days: int = 365
         self._settings_loaded = False
 
-    def load_settings(self):
+    def load_settings(self) -> bool:
         """Load retention / limit settings from ConfigManager."""
         if not hasattr(self, '_settings_loaded'):
-            section = self.cfg.get_section("memory") or {}
-            self.max_context_messages = int(section.get("max_context_messages", 20))
-            self.retention_days = int(section.get("retention_days", 365))
-            self._settings_loaded = True
+            try:
+                section = self.cfg.get_section("memory") or {}
+                self.max_context_messages = int(section.get("max_context_messages", 20))
+                self.retention_days = int(section.get("retention_days", 365))
+                self._settings_loaded = True
+                return True
+            except Exception:
+                return False
 
     def add_message(self, session_id: str, role: str, content: str, language: str = 'fa') -> None:
         """Insert a conversation message row."""

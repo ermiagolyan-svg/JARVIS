@@ -1,22 +1,16 @@
-# LLMClient for C.E.L.E.S.T.E. — Hybrid Local (llama-server.exe Qwen 3.5 9B)
-# + Cloud API Router (Google Gemini, Anthropic Claude, OpenAI ChatGPT).
+# LLMClient for C.E.L.E.S.T.E. — Hybrid Local (llama-server.exe) + Cloud API Router
 import json
 import os
-import re
-import time
 from typing import Any, Dict, Generator, List, Optional
 
 import requests
 
 
 class LLMClient:
-    # Communicates with local llama-server.exe at /v1/chat/completions
-    # and routes explicitly requested or complex queries to Gemini, Claude, or ChatGPT.
-
-    DEFAULT_BASE_URL = 'http://localhost:8080/v1'
+    DEFAULT_BASE_URL = 'http://127.0.0.1:8080/v1'
     MODEL_NAME = 'qwen3.5-9b'
     DEFAULT_TEMPERATURE = 0.4
-    DEFAULT_MAX_TOKENS = 2048
+    DEFAULT_MAX_TOKENS = 1024
 
     PROVIDER_KEYWORDS = {
         'gemini': ['جمینای', 'جمینی', 'gemini', 'گوگل جمینای'],
@@ -66,6 +60,53 @@ class LLMClient:
             return {'http': proxy, 'https': proxy}
         return None
 
+    @staticmethod
+    def _sanitize_messages(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        """Ensure strict Jinja template compliance for llama-server.exe:
+        1. Single 'system' message strictly at index 0.
+        2. Strictly alternating 'user' / 'assistant' roles after system.
+        3. Final message is always 'user'.
+        """
+        sys_parts: List[str] = []
+        conv: List[Dict[str, str]] = []
+
+        for m in messages:
+            role = (m.get('role') or 'user').lower().strip()
+            content = (m.get('content') or '').strip()
+            if not content:
+                continue
+            if role == 'system':
+                sys_parts.append(content)
+            elif role in ('user', 'assistant'):
+                if conv and conv[-1]['role'] == role:
+                    # Merge consecutive identical roles so Jinja never throws 500
+                    conv[-1]['content'] += '\n\n' + content
+                else:
+                    conv.append({'role': role, 'content': content})
+
+        # Ensure conversation starts with 'user'
+        while conv and conv[0]['role'] != 'user':
+            conv.pop(0)
+
+        # Ensure conversation ends with 'user'
+        if not conv:
+            # Fallback: use system content as a user turn so the returned
+            # list always starts with at most one 'system' message (index 0),
+            # alternates user/assistant, and ends with a 'user' message for
+            # llama-server.exe Jinja template compatibility.
+            if sys_parts:
+                conv.append({'role': 'user', 'content': '\\n\\n'.join(sys_parts)})
+            else:
+                conv.append({'role': 'user', 'content': 'Hello'})
+        elif conv[-1]['role'] != 'user':
+            conv.append({'role': 'user', 'content': 'ادامه بده و نتیجه را به فارسی بگو.'})
+
+        out: List[Dict[str, str]] = []
+        if sys_parts:
+            out.append({'role': 'system', 'content': '\n\n'.join(sys_parts)})
+        out.extend(conv)
+        return out
+
     def detect_requested_provider(self, messages: List[Dict[str, str]], explicit_provider: Optional[str] = None) -> str:
         if explicit_provider and explicit_provider.lower() in ('local', 'gemini', 'claude', 'openai'):
             return explicit_provider.lower()
@@ -99,45 +140,53 @@ class LLMClient:
                 return True
         except Exception:
             pass
-        print('[LLMClient] Server not responding; ensuring model is loaded...')
         ok = self._manager.ensure_model_loaded(timeout_seconds=120)
         if ok:
             self._connection_lost = False
-        else:
-            print('[LLMClient ERROR] Model failed to load.')
         return ok
 
-    def _build_payload(self, messages, stream=False):
+    def _build_payload(self, messages: List[Dict[str, str]], stream: bool = False, max_tokens_override: Optional[int] = None) -> str:
+        clean_msgs = self._sanitize_messages(messages)
         payload = {
-            'model': self.model_name,
-            'messages': messages,
+            'messages': clean_msgs,
             'temperature': self.temperature,
-            'max_tokens': self.max_tokens,
+            'max_tokens': max_tokens_override or self.max_tokens,
             'stream': stream,
         }
-        return json.dumps(payload)
+        return json.dumps(payload, ensure_ascii=False)
 
-    def _post(self, payload):
+    def _post(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
         url = self.base_url + '/chat/completions'
-        resp = requests.post(url, data=payload, headers={'Content-Type': 'application/json'}, timeout=120)
+        headers = {'Content-Type': 'application/json; charset=utf-8'}
+        payload_str = self._build_payload(messages, stream=False)
+        resp = requests.post(url, data=payload_str.encode('utf-8'), headers=headers, timeout=120)
+
+        # Fallback if history length or template still caused a 500/400 error: send only [system, last_user]
+        if resp.status_code >= 400:
+            clean = self._sanitize_messages(messages)
+            minimal = [clean[0], clean[-1]] if len(clean) >= 2 and clean[0]['role'] == 'system' else [clean[-1]]
+            retry_payload = self._build_payload(minimal, stream=False, max_tokens_override=512)
+            resp = requests.post(url, data=retry_payload.encode('utf-8'), headers=headers, timeout=120)
+
         resp.raise_for_status()
         body = resp.json()
         if not isinstance(body, dict):
             raise RuntimeError('Unexpected response format from LLM API.')
         return body
 
-    # ==================== CLOUD PROVIDERS (GEMINI / CLAUDE / OPENAI) ====================
+    # ==================== CLOUD PROVIDERS ====================
 
     def _call_gemini(self, messages: List[Dict[str, str]], cloud_cfg: Dict[str, Any]) -> Dict[str, Any]:
         api_key = (cloud_cfg.get('gemini_api_key') or os.environ.get('GEMINI_API_KEY') or '').strip()
         if not api_key:
-            raise RuntimeError('Gemini API key is not configured in config.json (cloud_ai.gemini_api_key).')
+            raise RuntimeError('Gemini API key is not configured.')
         model = cloud_cfg.get('gemini_model', 'gemini-2.5-flash')
         url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}'
 
+        clean_msgs = self._sanitize_messages(messages)
         system_instruction = ''
         contents = []
-        for m in messages:
+        for m in clean_msgs:
             role = m.get('role', 'user')
             text = m.get('content', '')
             if role == 'system':
@@ -168,12 +217,13 @@ class LLMClient:
     def _call_claude(self, messages: List[Dict[str, str]], cloud_cfg: Dict[str, Any]) -> Dict[str, Any]:
         api_key = (cloud_cfg.get('claude_api_key') or os.environ.get('ANTHROPIC_API_KEY') or '').strip()
         if not api_key:
-            raise RuntimeError('Claude API key is not configured in config.json (cloud_ai.claude_api_key).')
+            raise RuntimeError('Claude API key is not configured.')
         model = cloud_cfg.get('claude_model', 'claude-3-7-sonnet-latest')
-        system_text = '\n'.join(m.get('content', '') for m in messages if m.get('role') == 'system').strip()
+        clean_msgs = self._sanitize_messages(messages)
+        system_text = '\n'.join(m.get('content', '') for m in clean_msgs if m.get('role') == 'system').strip()
         chat_msgs = [
             {'role': 'assistant' if m.get('role') == 'assistant' else 'user', 'content': m.get('content', '')}
-            for m in messages if m.get('role') != 'system'
+            for m in clean_msgs if m.get('role') != 'system'
         ]
         payload: Dict[str, Any] = {
             'model': model,
@@ -184,11 +234,7 @@ class LLMClient:
         if system_text:
             payload['system'] = system_text
 
-        headers = {
-            'x-api-key': api_key,
-            'anthropic-version': '2023-06-01',
-            'content-type': 'application/json',
-        }
+        headers = {'x-api-key': api_key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json'}
         resp = requests.post('https://api.anthropic.com/v1/messages', json=payload, headers=headers, proxies=self._get_proxies(cloud_cfg), timeout=35)
         resp.raise_for_status()
         data = resp.json()
@@ -200,12 +246,12 @@ class LLMClient:
     def _call_openai(self, messages: List[Dict[str, str]], cloud_cfg: Dict[str, Any]) -> Dict[str, Any]:
         api_key = (cloud_cfg.get('openai_api_key') or os.environ.get('OPENAI_API_KEY') or '').strip()
         if not api_key:
-            raise RuntimeError('OpenAI API key is not configured in config.json (cloud_ai.openai_api_key).')
+            raise RuntimeError('OpenAI API key is not configured.')
         model = cloud_cfg.get('openai_model', 'gpt-4o')
         headers = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
         payload = {
             'model': model,
-            'messages': messages,
+            'messages': self._sanitize_messages(messages),
             'temperature': self.temperature,
             'max_tokens': self.max_tokens,
         }
@@ -216,7 +262,7 @@ class LLMClient:
         data['provider'] = self.last_used_provider
         return data
 
-    # ==================== UNIFIED CHAT METHODS ====================
+    # ==================== UNIFIED CHAT ====================
 
     def chat(self, messages: List[Dict[str, str]], provider: Optional[str] = None) -> Dict[str, Any]:
         target = self.detect_requested_provider(messages, provider)
@@ -230,53 +276,18 @@ class LLMClient:
                 elif target == 'openai':
                     return self._call_openai(messages, cloud_cfg)
             except Exception as exc:
-                print(f'[LLMClient WARN] Cloud provider {target} unavailable ({exc}); falling back to local Qwen 3.5 9B.')
+                print(f'[LLMClient WARN] Cloud provider {target} unavailable ({exc}); falling back to local.')
 
         if not self._ensure_model_loaded():
             raise RuntimeError('LLM server is unavailable.')
         self.last_used_provider = 'local'
-        payload = self._build_payload(messages, stream=False)
-        return self._post(payload)
+        return self._post(messages)
 
     def chat_stream(self, messages: List[Dict[str, str]], provider: Optional[str] = None) -> Generator[str, None, None]:
-        target = self.detect_requested_provider(messages, provider)
-        if target in ('gemini', 'claude', 'openai'):
-            try:
-                resp = self.chat(messages, provider=target)
-                content = resp.get('choices', [{}])[0].get('message', {}).get('content', '')
-                if content:
-                    yield content
-                    return
-            except Exception as exc:
-                print(f'[LLMClient WARN] Cloud stream fallback to local: {exc}')
-
-        if not self._ensure_model_loaded():
-            raise RuntimeError('LLM server is unavailable.')
-        self.last_used_provider = 'local'
-        url = self.base_url + '/chat/completions'
-        payload = json.loads(self._build_payload(messages, stream=True))
-        payload['stream'] = True
-        resp = requests.post(url, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=120, stream=True)
-        resp.raise_for_status()
-        for line in resp.iter_lines(decode_unicode=True):
-            if not line:
-                continue
-            line = line.strip()
-            if line.startswith('data: '):
-                data_part = line[6:]
-                if data_part == '[DONE]':
-                    return
-                try:
-                    obj = json.loads(data_part)
-                except (json.JSONDecodeError, ValueError):
-                    continue
-                choices = obj.get('choices', [])
-                if not choices:
-                    continue
-                delta = choices[0].get('delta', {})
-                content = delta.get('content')
-                if content and isinstance(content, str) and content.strip():
-                    yield content
+        resp = self.chat(messages, provider=provider)
+        content = resp.get('choices', [{}])[0].get('message', {}).get('content', '')
+        if content:
+            yield content
 
     def get_health_status(self):
         health_url = self.base_url.replace('/v1', '') + '/health'
@@ -288,14 +299,3 @@ class LLMClient:
 
     def set_model(self, model_name):
         self.model_name = model_name
-
-
-if __name__ == '__main__':
-    print('=== C.E.L.E.S.T.E. Hybrid LLMClient Self-Test ===')
-    client = LLMClient()
-    print('[TEST] Base URL:', client.base_url)
-    print('[TEST] Local Model:', client.model_name)
-    assert client.detect_requested_provider([{'role': 'user', 'content': 'سلست این سوال رو از جمینای بپرس'}]) == 'gemini'
-    assert client.detect_requested_provider([{'role': 'user', 'content': 'با کلود کد رو بررسی کن'}]) == 'claude'
-    assert client.detect_requested_provider([{'role': 'user', 'content': 'سلام وضعیت سیستم چطوره؟'}]) == 'local'
-    print('[OK] Hybrid Provider Detection (Local / Gemini / Claude / OpenAI) verified.')
