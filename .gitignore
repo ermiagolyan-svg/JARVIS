@@ -34,3 +34,5 @@ Build/
 Configuration/auth_token.json
 Configuration/ssl_cert.pem
 Configuration/ssl_key.pem
+# Gooya TTS weights, HF cache & isolated Python 3.11 venv
+Data/Models/gooya/
