@@ -88,3 +88,10 @@
     - Updated configuration schema to reflect v2.0 `config.json`.
     - Recorded all historical audit items and structural gaps as verified and resolved.
   - Step 3: Updated `PROJECT_STATUS.md` with complete v2.0 tracking and synchronization.
+
+- **Frontend Phase 5 (2026-11-19): Upgrade WPF Voice & TTS UI for Dual-Engine (Gemini + Gooya v1.5) & VRAM Controls** — COMPLETED & VERIFIED.
+  - Step 1: Upgraded `Desktop/UI/Models/JarvisModels.cs` with expanded `VoiceConfigModel` (engine_mode, online_api_key, gemini_model, gemini_voice_name, gooya_model_dir, gooya_reference_audio, gooya_exaggeration, gooya_cfg_weight, gooya_precision, gooya_auto_unload, dsp_pitch_semitones, dsp_metallic_mix, dsp_reverb_mix, wake_threshold) and `SystemStatusModel` target model name `Gemma 4 26B-A4B IT (IQ4_XS)`.
+  - Step 2: Added `GetVoiceConfigAsync()` to `Desktop/UI/Services/JarvisBackendClient.cs` for querying `GET /api/v1/voice/config`.
+  - Step 3: Upgraded `Desktop/UI/MainWindow.xaml` Tab 1 to "VOICE & TTS" with interactive engine switcher (`gemini` vs `gooya`), Gemini model & voice selectors, Gooya speaker prompt selector, exaggeration/CFG sliders, BF16/FP32 precision picker, auto-unload VRAM toggle, and mastering DSP sliders.
+  - Step 4: Upgraded `Desktop/UI/MainWindow.xaml.cs` with `LoadVoiceConfigFromBackendAsync()`, dynamic panel visibility toggling, file browsing dialog, real-time slider labels, live config persistence, and voice testing.
+  - Step 5: Compiled with `dotnet build Desktop/UI/JarvisDesktop.csproj -c Release` (0 Warnings, 0 Errors). Staged and committed.
