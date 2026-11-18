@@ -15,7 +15,9 @@ from typing import Optional
 import numpy as np
 from scipy.signal import lfilter
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 logger = logging.getLogger(__name__)
 
 
@@ -243,12 +245,15 @@ class VoiceOrchestrator:
         reverb_decay=None,
         muted=None,
         audio_source=None,
+        wake_threshold=None,
+        tts_config=None,
     ):
         '''Apply voice configuration changes live to the active pipeline.
 
         Updates JarvisAudioDSP global config and, if a TTSEngine instance with
         a cached _dsp is available, pushes the same config to it immediately.
-        Also handles mute toggle and wake-word audio-source changes.
+        Also handles mute toggle, wake-word audio-source/threshold changes,
+        and TTS engine updates.
         '''
         # 1) Update global DSP config
         from Voice.AudioDSP.jarvis_dsp import JarvisAudioDSP
@@ -272,19 +277,32 @@ class VoiceOrchestrator:
             except Exception:
                 pass
 
-        # 3) Mute toggle (only if explicitly provided)
+        # 3) Update TTSEngine config directly
+        if tts_config and self.tts_engine and hasattr(self.tts_engine, 'update_config'):
+            try:
+                self.tts_engine.update_config(tts_config)
+            except Exception:
+                pass
+
+        # 4) Mute toggle (only if explicitly provided)
         if muted is not None:
             if muted:
                 self.mute()
             else:
                 self.unmute()
 
-        # 4) Wake-word audio-source change
-        if audio_source is not None and self.wake_word_engine is not None:
-            try:
-                self.wake_word_engine.set_audio_source(audio_source)
-            except Exception:
-                pass
+        # 5) Wake-word audio-source and threshold change
+        if self.wake_word_engine is not None:
+            if audio_source is not None:
+                try:
+                    self.wake_word_engine.set_audio_source(audio_source)
+                except Exception:
+                    pass
+            if wake_threshold is not None and hasattr(self.wake_word_engine, 'set_wake_threshold'):
+                try:
+                    self.wake_word_engine.set_wake_threshold(float(wake_threshold))
+                except Exception:
+                    pass
 
     def get_status(self) -> dict:
         '''Return pipeline status snapshot.'''

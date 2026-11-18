@@ -49,17 +49,60 @@ _voice_config: Dict[str, Any] = {
     "mute": False,
     "muted": False,
     "volume": 75,
-    "engine_mode": "online",
-    "local_engine": "pocket",
-    "online_provider": "gemini",
-    "online_api_key": "",
-    "online_voice_name": "Kore",
+    "engine_mode": "gemini",
+    "online_api_key": "AQ.Ab8RN6IlbejJqeSUnU3qyPqPMec2JdkTtPavWykBTzJAZ_y3lg",
+    "gemini_model": "gemini-2.5-flash-preview-tts",
+    "gemini_voice_name": "Kore",
+    "gooya_model_dir": "Data/Models/gooya",
+    "gooya_reference_audio": "Data/Models/gooya/speaker_reference.wav",
+    "gooya_exaggeration": 0.5,
+    "gooya_cfg_weight": 0.5,
+    "gooya_precision": "bf16",
+    "gooya_auto_unload": False,
     "language": "fa-IR",
     "pitch_semitones": -0.3,
-    "metallic_mix": 0.10,
-    "reverb_decay": 0.20,
+    "dsp_pitch_semitones": -0.3,
+    "metallic_mix": 0.0,
+    "dsp_metallic_mix": 0.0,
+    "reverb_decay": 0.0,
+    "dsp_reverb_mix": 0.0,
     "wake_threshold": 0.50,
 }
+
+
+def _sync_voice_config_from_disk() -> Dict[str, Any]:
+    try:
+        from Core.Config.config_loader import get_config
+        cfg = get_config()
+        v = cfg.get_section("voice") or {}
+        pitch = float(v.get("dsp_pitch_semitones", v.get("pitch_semitones", -0.3)))
+        metallic = float(v.get("dsp_metallic_mix", v.get("metallic_mix", 0.0)))
+        reverb = float(v.get("dsp_reverb_mix", v.get("reverb_decay", 0.0)))
+        wake_th = float(v.get("wake_threshold", 0.50))
+
+        _voice_config["engine_mode"] = str(v.get("engine_mode", _voice_config.get("engine_mode", "gemini")))
+        _voice_config["online_api_key"] = str(v.get("online_api_key", _voice_config.get("online_api_key", "")))
+        _voice_config["gemini_model"] = str(v.get("gemini_model", _voice_config.get("gemini_model", "gemini-2.5-flash-preview-tts")))
+        _voice_config["gemini_voice_name"] = str(v.get("gemini_voice_name", _voice_config.get("gemini_voice_name", "Kore")))
+        _voice_config["gooya_model_dir"] = str(v.get("gooya_model_dir", _voice_config.get("gooya_model_dir", "Data/Models/gooya")))
+        _voice_config["gooya_reference_audio"] = str(v.get("gooya_reference_audio", _voice_config.get("gooya_reference_audio", "Data/Models/gooya/speaker_reference.wav")))
+        _voice_config["gooya_exaggeration"] = float(v.get("gooya_exaggeration", _voice_config.get("gooya_exaggeration", 0.5)))
+        _voice_config["gooya_cfg_weight"] = float(v.get("gooya_cfg_weight", _voice_config.get("gooya_cfg_weight", 0.5)))
+        _voice_config["gooya_precision"] = str(v.get("gooya_precision", _voice_config.get("gooya_precision", "bf16")))
+        _voice_config["gooya_auto_unload"] = bool(v.get("gooya_auto_unload", _voice_config.get("gooya_auto_unload", False)))
+        _voice_config["dsp_pitch_semitones"] = pitch
+        _voice_config["pitch_semitones"] = pitch
+        _voice_config["dsp_metallic_mix"] = metallic
+        _voice_config["metallic_mix"] = metallic
+        _voice_config["dsp_reverb_mix"] = reverb
+        _voice_config["reverb_decay"] = reverb
+        _voice_config["wake_threshold"] = wake_th
+    except Exception as exc:
+        _logger.warning("Error syncing voice config from disk: %s", exc)
+    return _voice_config
+
+
+_sync_voice_config_from_disk()
 
 _telemetry_data: Dict[str, Any] = {
     "uptime_seconds": 0,
@@ -144,7 +187,7 @@ def _get_memory_manager() -> Any:
     if _memory_manager is None:
         try:
             from Core.Memory.memory_manager import MemoryManager
-            _memory_manager = MemoryManager()
+            _memory_manager = MemoryManager.get_memory_manager()
         except Exception as e:
             _logger.warning("MemoryManager init warning: %s", e)
             _memory_manager = None
@@ -362,22 +405,44 @@ class VoiceConfigRequest(BaseModel):
     mute: Optional[bool] = None
     muted: Optional[bool] = None
     volume: Optional[int] = Field(None, ge=0, le=100)
-    engine_mode: Optional[str] = Field(None, description="'local' or 'online'")
-    local_engine: Optional[str] = Field(None, description="'xtts' or 'pocket'")
-    online_provider: Optional[str] = None
+    engine_mode: Optional[str] = Field(None, description="'gemini' or 'gooya'")
     online_api_key: Optional[str] = None
-    online_voice_name: Optional[str] = None
-    language: Optional[str] = None
+    gemini_model: Optional[str] = None
+    gemini_voice_name: Optional[str] = None
+    gooya_model_dir: Optional[str] = None
+    gooya_reference_audio: Optional[str] = None
+    gooya_exaggeration: Optional[float] = None
+    gooya_cfg_weight: Optional[float] = None
+    gooya_precision: Optional[str] = None
+    gooya_auto_unload: Optional[bool] = None
+    dsp_pitch_semitones: Optional[float] = None
     pitch_semitones: Optional[float] = None
+    dsp_metallic_mix: Optional[float] = None
     metallic_mix: Optional[float] = None
+    dsp_reverb_mix: Optional[float] = None
     reverb_decay: Optional[float] = None
     wake_threshold: Optional[float] = None
+    language: Optional[str] = None
+    local_engine: Optional[str] = None
+    online_provider: Optional[str] = None
+    online_voice_name: Optional[str] = None
+
+
 class MemoryCreateRequest(BaseModel):
     category: Optional[str] = Field(default="user")
-    key: str = Field(..., min_length=1)
+    key: Optional[str] = Field(default=None)
+    fact_key: Optional[str] = Field(default=None)
     value: Any = None
+    fact_value: Any = None
     importance: Optional[int] = Field(default=5)
     metadata: Dict[str, Any] = {}
+
+    def get_key(self) -> str:
+        return (self.key or self.fact_key or "").strip()
+
+    def get_value(self) -> str:
+        v = self.value if self.value is not None else self.fact_value
+        return str(v) if v is not None else ""
 
 
 # ---------------------------------------------------------------------------
@@ -466,17 +531,37 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
                 llm_online = False
 
         muted_val = bool(_voice_config.get("muted", _voice_config.get("mute", False)))
+
+        target_model = "Gemma 4 26B-A4B IT (IQ4_XS)"
+        try:
+            from Core.Config.config_loader import get_config
+            cfg_mgr = get_config()
+            target_model = cfg_mgr.get("llama_cpp", "target_model_name", target_model)
+        except Exception:
+            pass
+
+        mm = _get_memory_manager()
+        mem_count = 0
+        if mm is not None:
+            try:
+                stats = mm.get_stats()
+                mem_count = stats.get("facts", 0) + stats.get("conversations", 0)
+            except Exception:
+                mem_count = len(_memory_store)
+        else:
+            mem_count = len(_memory_store)
+
         return {
             "service": "JARVIS REST API",
             "version": "1.0.0",
             "lan_only": True,
             "token_auth": True,
-            "memory_count": len(_memory_store),
+            "memory_count": mem_count,
             "pending_security": len([s for s in _pending_security if s.get("status") == "pending"]),
             "uptime_seconds": int(time.time() - _START_TIME),
             "state": ws_state.get("state", "IDLE"),
             "model_loaded": llm_online or bool(ws_state.get("model_loaded", True)),
-            "model_name": "Qwen 3.8 35B-A3B",
+            "model_name": target_model,
             "lumia_connected": bool(ws_state.get("lumia_connected", False)),
             "muted": muted_val,
             "active_mic": ws_state.get("active_mic", "mic"),
@@ -586,12 +671,13 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
 
     @app.get("/api/v1/voice/config", tags=["voice"])
     async def api_voice_config_get():
+        _sync_voice_config_from_disk()
         try:
-            from Voice.AudioDSP.jarvis_dsp import JarvisAudioDSP
-            JarvisAudioDSP.set_global_config(
-                pitch_semitones=_voice_config.get("pitch_semitones"),
-                metallic_mix=_voice_config.get("metallic_mix"),
-                reverb_decay=_voice_config.get("reverb_decay"),
+            from Voice.AudioDSP.jarvis_dsp import CelesteAudioDSP
+            CelesteAudioDSP.set_global_config(
+                pitch_semitones=_voice_config.get("dsp_pitch_semitones", _voice_config.get("pitch_semitones")),
+                metallic_mix=_voice_config.get("dsp_metallic_mix", _voice_config.get("metallic_mix")),
+                reverb_decay=_voice_config.get("dsp_reverb_mix", _voice_config.get("reverb_decay")),
             )
         except Exception:
             pass
@@ -605,54 +691,116 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
             data = await request.json()
         except Exception:
             data = {}
-            
+
+        # 1. Normalize engine_mode
+        if "engine_mode" in data and data["engine_mode"]:
+            raw_mode = str(data["engine_mode"]).lower().strip()
+            if raw_mode in ("online", "gemini"):
+                data["engine_mode"] = "gemini"
+            elif raw_mode in ("local", "gooya"):
+                data["engine_mode"] = "gooya"
+
         allowed_keys = (
-            "mute", "muted", "volume", "engine_mode", "local_engine", 
-            "online_provider", "online_api_key", "online_voice_name",
-            "language", "pitch_semitones", "metallic_mix", "reverb_decay", "wake_threshold"
+            "mute", "muted", "volume", "engine_mode", "online_api_key",
+            "gemini_model", "gemini_voice_name", "gooya_model_dir",
+            "gooya_reference_audio", "gooya_exaggeration", "gooya_cfg_weight",
+            "gooya_precision", "gooya_auto_unload", "dsp_pitch_semitones",
+            "pitch_semitones", "dsp_metallic_mix", "metallic_mix",
+            "dsp_reverb_mix", "reverb_decay", "wake_threshold", "language",
+            "local_engine", "online_provider", "online_voice_name"
         )
         for k in allowed_keys:
             if k in data and data[k] is not None:
                 _voice_config[k] = data[k]
-                
+
+        if "dsp_pitch_semitones" in data and data["dsp_pitch_semitones"] is not None:
+            _voice_config["dsp_pitch_semitones"] = float(data["dsp_pitch_semitones"])
+            _voice_config["pitch_semitones"] = float(data["dsp_pitch_semitones"])
+        elif "pitch_semitones" in data and data["pitch_semitones"] is not None:
+            _voice_config["dsp_pitch_semitones"] = float(data["pitch_semitones"])
+            _voice_config["pitch_semitones"] = float(data["pitch_semitones"])
+
+        if "dsp_metallic_mix" in data and data["dsp_metallic_mix"] is not None:
+            _voice_config["dsp_metallic_mix"] = float(data["dsp_metallic_mix"])
+            _voice_config["metallic_mix"] = float(data["dsp_metallic_mix"])
+        elif "metallic_mix" in data and data["metallic_mix"] is not None:
+            _voice_config["dsp_metallic_mix"] = float(data["metallic_mix"])
+            _voice_config["metallic_mix"] = float(data["metallic_mix"])
+
+        if "dsp_reverb_mix" in data and data["dsp_reverb_mix"] is not None:
+            _voice_config["dsp_reverb_mix"] = float(data["dsp_reverb_mix"])
+            _voice_config["reverb_decay"] = float(data["dsp_reverb_mix"])
+        elif "reverb_decay" in data and data["reverb_decay"] is not None:
+            _voice_config["dsp_reverb_mix"] = float(data["reverb_decay"])
+            _voice_config["reverb_decay"] = float(data["reverb_decay"])
+
+        if "wake_threshold" in data and data["wake_threshold"] is not None:
+            _voice_config["wake_threshold"] = float(data["wake_threshold"])
+
         if "muted" in data:
             _voice_config["mute"] = bool(data["muted"])
+            _voice_config["muted"] = bool(data["muted"])
         elif "mute" in data:
             _voice_config["muted"] = bool(data["mute"])
+            _voice_config["mute"] = bool(data["mute"])
 
-        # Correct ConfigManager Key-Value Persistence (Flash Fix 1)
+        # 2. Persist to Configuration/config.json via ConfigManager
         try:
             from Core.Config.config_loader import get_config
             cfg_mgr = get_config()
-            for k in ("engine_mode", "local_engine", "online_provider", "online_api_key", "online_voice_name", "pitch_semitones", "metallic_mix", "reverb_decay"):
-                if k in _voice_config:
+            cfg_keys = [
+                "engine_mode", "online_api_key", "gemini_model", "gemini_voice_name",
+                "gooya_model_dir", "gooya_reference_audio", "gooya_exaggeration",
+                "gooya_cfg_weight", "gooya_precision", "gooya_auto_unload",
+                "wake_threshold"
+            ]
+            for k in cfg_keys:
+                if k in _voice_config and _voice_config[k] is not None:
                     cfg_mgr.set("voice", k, _voice_config[k])
+
+            cfg_mgr.set("voice", "dsp_pitch_semitones", _voice_config["dsp_pitch_semitones"])
+            cfg_mgr.set("voice", "pitch_semitones", _voice_config["pitch_semitones"])
+            cfg_mgr.set("voice", "dsp_metallic_mix", _voice_config["dsp_metallic_mix"])
+            cfg_mgr.set("voice", "dsp_reverb_mix", _voice_config["dsp_reverb_mix"])
             cfg_mgr.save()
         except Exception as e:
             _logger.warning("Could not persist voice config: %s", e)
 
+        # 3. Update CelesteAudioDSP live
         try:
-            from Voice.AudioDSP.jarvis_dsp import JarvisAudioDSP
-            JarvisAudioDSP.set_global_config(
-                pitch_semitones=_voice_config.get("pitch_semitones"),
-                metallic_mix=_voice_config.get("metallic_mix"),
-                reverb_decay=_voice_config.get("reverb_decay")
+            from Voice.AudioDSP.jarvis_dsp import CelesteAudioDSP
+            CelesteAudioDSP.set_global_config(
+                pitch_semitones=_voice_config.get("dsp_pitch_semitones"),
+                metallic_mix=_voice_config.get("dsp_metallic_mix"),
+                reverb_decay=_voice_config.get("dsp_reverb_mix"),
             )
-        except Exception:
-            pass
-
-        # Trigger Instant Memory Synchronization (Flash Fix 2)
-        engine_mode = _voice_config.get("engine_mode", "online")
-        local_engine = _voice_config.get("local_engine", "pocket")
-        try:
-            orch = getattr(request.app.state, "voice_orchestrator", None)
-            if orch is not None and hasattr(orch, "tts_engine") and hasattr(orch.tts_engine, "force_sync_memory_state"):
-                orch.tts_engine.force_sync_memory_state(engine_mode=engine_mode, local_engine=local_engine)
-            global _tts_engine
-            if _tts_engine is not None and hasattr(_tts_engine, "force_sync_memory_state"):
-                _tts_engine.force_sync_memory_state(engine_mode=engine_mode, local_engine=local_engine)
         except Exception as e:
-            _logger.warning("Failed to force instant memory sync: %s", e)
+            _logger.warning("Failed to update CelesteAudioDSP: %s", e)
+
+        # 4. Update WakeWordEngine & VoiceOrchestrator live
+        orch = getattr(request.app.state, "voice_orchestrator", None)
+        if orch is not None:
+            try:
+                orch.apply_voice_config(
+                    pitch_semitones=_voice_config.get("dsp_pitch_semitones"),
+                    metallic_mix=_voice_config.get("dsp_metallic_mix"),
+                    reverb_decay=_voice_config.get("dsp_reverb_mix"),
+                    muted=_voice_config.get("muted"),
+                    wake_threshold=_voice_config.get("wake_threshold"),
+                    tts_config=dict(_voice_config),
+                )
+            except Exception as e:
+                _logger.warning("Failed to apply voice config to orchestrator: %s", e)
+
+        # 5. Update TTSEngine singleton directly (switches gemini <-> gooya and unloads VRAM)
+        try:
+            global _tts_engine
+            if _tts_engine is not None and hasattr(_tts_engine, "update_config"):
+                _tts_engine.update_config(_voice_config)
+            elif orch is not None and hasattr(orch, "tts_engine") and orch.tts_engine is not None:
+                orch.tts_engine.update_config(_voice_config)
+        except Exception as e:
+            _logger.warning("Failed to update TTSEngine config: %s", e)
 
         return dict(_voice_config)
     @app.get("/api/v1/memory/history", tags=["memory"])
@@ -702,89 +850,71 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
 
     # --- Memory Facts (SQLite + C# FactItem compatible) ---
     @app.get("/api/v1/memory/facts", tags=["memory"])
-    async def api_memory_facts():
+    async def api_memory_facts(category: Optional[str] = None):
         _telemetry_incr()
         facts_list: List[Dict[str, Any]] = []
         mm = _get_memory_manager()
         if mm is not None:
             try:
-                raw_facts = []
-                if hasattr(mm, "get_all_facts"):
-                    raw_facts = mm.get_all_facts() or []
-                elif hasattr(mm, "list_facts"):
-                    raw_facts = mm.list_facts() or []
-                for idx, f in enumerate(raw_facts, 1):
-                    if isinstance(f, dict):
-                        facts_list.append({
-                            "id": int(f.get("id", idx)),
-                            "category": str(f.get("category", "user")),
-                            "key": str(f.get("key", "")),
-                            "value": str(f.get("value", "")),
-                            "importance": int(f.get("importance", 5)),
-                        })
-            except Exception:
-                pass
-
-        for k, v in _facts_fallback_store.items():
-            if not any(existing["key"] == k for existing in facts_list):
-                facts_list.append(v)
-
+                facts_list = mm.get_all_facts(category=category) or []
+            except Exception as e:
+                _logger.error("Failed to query facts from SQLite: %s", e)
         return {"facts": facts_list}
 
     @app.post("/api/v1/memory/facts", tags=["memory"])
     async def api_memory_fact_create(body: MemoryCreateRequest):
         _telemetry_incr()
         cat = body.category or "user"
-        val_str = str(body.value) if body.value is not None else ""
-        imp = int(body.importance or 5)
+        fact_key = body.get_key()
+        if not fact_key:
+            raise HTTPException(status_code=422, detail="Missing required field 'key' or 'fact_key'")
+        val_str = body.get_value()
+        imp = int(body.importance if body.importance is not None else 5)
 
         mm = _get_memory_manager()
-        if mm is not None and hasattr(mm, "set_fact"):
-            try:
-                mm.set_fact(category=cat, key=body.key, value=val_str, importance=imp)
-            except Exception:
-                pass
+        if mm is None:
+            raise HTTPException(status_code=500, detail="MemoryManager not available")
 
-        fact_id = len(_facts_fallback_store) + 1
-        item = {
-            "id": fact_id,
+        try:
+            mm.set_fact(category=cat, key=fact_key, value=val_str, importance=imp)
+        except Exception as e:
+            _logger.error("Failed to save fact to SQLite: %s", e)
+            raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+        # Fetch the created/updated fact from SQLite
+        all_facts = mm.get_all_facts()
+        for f in all_facts:
+            if f.get("key") == fact_key.lower():
+                return f
+
+        return {
+            "id": 1,
             "category": cat,
-            "key": body.key,
+            "key": fact_key,
+            "fact_key": fact_key,
             "value": val_str,
+            "fact_value": val_str,
             "importance": imp,
             "metadata": body.metadata,
-            "created_at": _now_str(),
+            "updated_at": _now_str(),
         }
-        _facts_fallback_store[body.key] = item
-        return item
 
     @app.delete("/api/v1/memory/facts/{fact_key}", tags=["memory"])
     async def api_memory_fact_delete(fact_key: str):
         _telemetry_incr()
         mm = _get_memory_manager()
-        deleted_db = False
-        if mm is not None:
-            try:
-                if fact_key.isdigit() and hasattr(mm, "delete_fact_by_id"):
-                    deleted_db = bool(mm.delete_fact_by_id(int(fact_key)))
-                elif hasattr(mm, "delete_fact"):
-                    deleted_db = bool(mm.delete_fact(fact_key))
-            except Exception:
-                pass
+        if mm is None:
+            raise HTTPException(status_code=500, detail="MemoryManager not available")
 
-        # Safe delete: use .pop(key, None) to never raise KeyError
-        item = _facts_fallback_store.pop(fact_key, None)
-        if item is not None:
-            return {"deleted": True, "item": item}
+        try:
+            deleted = bool(mm.delete_fact(fact_key))
+        except Exception as e:
+            _logger.error("Failed to delete fact from SQLite: %s", e)
+            raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
-        # Fallback: search by "id" field (handles integer ID strings like "12")
-        for k, v in list(_facts_fallback_store.items()):
-            if str(v.get("id")) == str(fact_key):
-                item = _facts_fallback_store.pop(k)
-                return {"deleted": True, "item": item}
+        if deleted:
+            return {"deleted": True, "key": fact_key, "id": fact_key}
 
-        if deleted_db:
-            return {"deleted": True, "id": fact_key}
         raise HTTPException(status_code=404, detail=f"Fact '{fact_key}' not found")
 
     # --- Legacy Key-Value Memory CRUD (for self-test) ---
@@ -995,16 +1125,21 @@ def _run_self_test() -> bool:
             print(f"  [FAIL] {name} -> {r.status_code} (expected {expected_status})")
 
     _check("GET /ping", client.get("/ping"), 200)
-    _check("GET /status", client.get("/api/v1/status", headers=headers), 200)
+    r_stat = client.get("/api/v1/status", headers=headers)
+    _check("GET /status", r_stat, 200)
+    assert r_stat.json().get("model_name") == "Gemma 4 26B-A4B IT (IQ4_XS)", f"Expected Gemma 4 model name, got: {r_stat.json().get('model_name')}"
     _check("POST /pair", client.post("/api/v1/pair", json={"device_name": "JarvisDesktopPC"}, headers=headers), 200)
     r_tel = client.get("/api/v1/telemetry", headers=headers)
     _check("GET /telemetry", r_tel, 200)
     print(f"  [INFO] Live Telemetry Snapshot: {r_tel.json()}")
-    r_chat = client.post("/api/v1/chat", json={"text": "ط³ظ„ط§ظ… ط³ظ„ط³طھ"}, headers=headers)
+    r_chat = client.post("/api/v1/chat", json={"text": "سلام سلست"}, headers=headers)
     _check("POST /chat (C# text + spoken_response)", r_chat, 200)
     assert "spoken_response" in r_chat.json(), "Missing spoken_response!"
     _check("POST /voice/mute", client.post("/api/v1/voice/mute", json={"muted": True}, headers=headers), 200)
-    _check("POST /voice/config", client.post("/api/v1/voice/config", json={"pitch_semitones": -0.3}, headers=headers), 200)
+    _check("GET /voice/config", client.get("/api/v1/voice/config", headers=headers), 200)
+    _check("POST /voice/config", client.post("/api/v1/voice/config", json={"pitch_semitones": -0.3, "engine_mode": "gemini"}, headers=headers), 200)
+    _check("PUT /voice/config", client.put("/api/v1/voice/config", json={"engine_mode": "gooya", "gooya_exaggeration": 0.6}, headers=headers), 200)
+    _check("PUT /voice/config (gemini)", client.put("/api/v1/voice/config", json={"engine_mode": "gemini"}, headers=headers), 200)
     _check("GET /memory/history", client.get("/api/v1/memory/history", headers=headers), 200)
     _check("POST /memory/facts", client.post("/api/v1/memory/facts", json={"category": "user", "key": "test_k", "value": "test_v", "importance": 8}, headers=headers), 200)
     _check("GET /memory/facts", client.get("/api/v1/memory/facts", headers=headers), 200)

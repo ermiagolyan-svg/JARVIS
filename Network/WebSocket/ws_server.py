@@ -169,21 +169,39 @@ class JarvisWebSocketManager:
         # Include live hardware telemetry in the HUD
         hw_telemetry = {}
         try:
-            from Core.Monitoring.hardware_monitor import HardwareMonitor
+            from Desktop.Monitoring.hardware_monitor import HardwareMonitor
             hm = HardwareMonitor()
-            snap = hm.get_telemetry_snapshot() if hasattr(hm, "get_telemetry_snapshot") else {}
-            if isinstance(snap, dict):
-                hw_telemetry = {
-                    "cpu_percent": float(snap.get("cpu_percent", 0)),
-                    "gpu_percent": float(snap.get("gpu_percent", 0)),
-                    "gpu_temp_c": float(snap.get("gpu_temp_c", 0)),
-                    "vram_used_mb": float(snap.get("vram_used_mb", 0)),
-                    "vram_total_mb": float(snap.get("vram_total_mb", 10240)),
-                    "ram_used_gb": float(snap.get("ram_used_gb", 0)),
-                    "ram_total_gb": float(snap.get("ram_total_gb", 32)),
-                }
+            snap = hm.get_telemetry_snapshot() if hasattr(hm, "get_telemetry_snapshot") else None
+            if snap is not None:
+                if isinstance(snap, dict):
+                    hw_telemetry = {
+                        "cpu_percent": float(snap.get("cpu_percent", 0)),
+                        "gpu_percent": float(snap.get("gpu_percent", 0)),
+                        "gpu_temp_c": float(snap.get("gpu_temp_c", 0)),
+                        "vram_used_mb": float(snap.get("vram_used_mb", 0)),
+                        "vram_total_mb": float(snap.get("vram_total_mb", 10240)),
+                        "ram_used_gb": float(snap.get("ram_used_gb", 0)),
+                        "ram_total_gb": float(snap.get("ram_total_gb", 32)),
+                    }
+                else:
+                    cpu = getattr(snap, "cpu", None)
+                    gpu = getattr(snap, "gpu", None)
+                    ram = getattr(snap, "ram", None)
+                    hw_telemetry = {
+                        "cpu_percent": float(getattr(cpu, "usage_percent", 0.0) if cpu else 0.0),
+                        "gpu_percent": float(getattr(gpu, "usage_percent", 0.0) if gpu else 0.0),
+                        "gpu_temp_c": float(getattr(gpu, "temp_celsius", 0.0) if gpu else 0.0),
+                        "vram_used_mb": float(getattr(gpu, "vram_used_mb", 0.0) if gpu else 0.0),
+                        "vram_total_mb": float(getattr(gpu, "vram_total_mb", 10240.0) if gpu else 10240.0),
+                        "ram_used_gb": float(getattr(ram, "used_gb", 0.0) if ram else 0.0),
+                        "ram_total_gb": float(getattr(ram, "total_gb", 32.0) if ram else 32.0),
+                    }
         except Exception:
             pass
+
+        combined_telemetry = self._telemetry.copy()
+        if hw_telemetry:
+            combined_telemetry.update(hw_telemetry)
 
         return {
             'type': 'hud_update',
@@ -193,7 +211,7 @@ class JarvisWebSocketManager:
             'model_loaded': self._model_loaded,
             'muted': self._muted,
             'active_mic': self._active_mic,
-            'telemetry': hw_telemetry if hw_telemetry else self._telemetry.copy(),
+            'telemetry': combined_telemetry,
             'pending_confirmations': list(self._pending_confirmations),
             'last_message': self._last_message if isinstance(self._last_message, dict) else {'text': str(self._last_message or '')},
         }
@@ -555,12 +573,14 @@ def _run_self_test() -> bool:
     except Exception as e:
         _check(f'mute_toggle test ({e})', False, True)
 
-    # Test 7: text_command on /ws/desktop -> hud_update
+    # Test 7: text_command on /ws/desktop -> hud_update (mocked chat for non-blocking self-test)
     try:
-        with client.websocket_connect(f'/ws/desktop?token={test_token}') as ws:
-            ws.send_text(json.dumps({'type': 'text_command', 'payload': {'text': 'Hello JARVIS'}}))
-            reply = json.loads(ws.receive_text())
-            _check('Desktop text_command -> hud_update', reply.get('type'), 'hud_update')
+        from unittest.mock import patch
+        with patch('Core.Conversation.dialogue_manager.DialogueManager.chat', return_value='Salam'):
+            with client.websocket_connect(f'/ws/desktop?token={test_token}') as ws:
+                ws.send_text(json.dumps({'type': 'text_command', 'payload': {'text': 'Hello JARVIS'}}))
+                reply = json.loads(ws.receive_text())
+                _check('Desktop text_command -> hud_update', reply.get('type'), 'hud_update')
     except Exception as e:
         _check(f'Desktop text_command test ({e})', False, True)
 

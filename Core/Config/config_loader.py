@@ -20,48 +20,65 @@ CONFIG_PATH = PROJECT_ROOT / "Configuration" / "config.json"
 # Default configuration values (used for automatic restoration of missing keys)
 DEFAULT_CONFIG: Dict[str, Any] = {
     "system": {
-        "project_name": "JARVIS",
-        "version": "1.0.0",
-        "language": "fa",
+        "project_name": "CELESTE",
+        "assistant_name": "C.E.L.E.S.T.E.",
+        "version": "2.0.0",
+        "language": "fa-IR",
+        "log_level": "INFO",
         "fallback_language": "en",
         "single_instance_port": 8764,
     },
+    "network": {
+        "host": "0.0.0.0",
+        "port": 8765,
+        "rest_port": 8765,
+        "ws_port": 8765,
+        "require_auth": True,
+        "token_file": "Configuration/auth_token.json",
+        "heartbeat_interval": 10,
+    },
     "llama_cpp": {
+        "server_binary_path": "llama-server.exe",
         "server_exe_path": "llama-server.exe",
-        "model_gguf_path": "D:/AI/Models/qwen3.5-9b.gguf",
-        "target_model_name": "Qwen 3.5 9B (llama.cpp CUDA 13.5)",
+        "model_gguf_path": "D:/AI/Models/Gemma-4-26B-A4B-IQ4_XS/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
+        "target_model_name": "Gemma 4 26B-A4B IT (IQ4_XS)",
         "host": "127.0.0.1",
         "port": 8080,
         "base_url": "http://127.0.0.1:8080/v1",
         "health_url": "http://127.0.0.1:8080/health",
-        "n_gpu_layers": 99,
-        "context_length": 8192,
-        "cpu_threads": 8,
+        "context_length": 16384,
+        "gpu_layers": 99,
+        "threads": 8,
+        "threads_batch": 12,
+        "batch_size": 2048,
+        "ubatch_size": 512,
         "flash_attn": True,
-        "kv_cache_type": "q8_0",
+        "cache_type_k": "q8_0",
+        "cache_type_v": "q8_0",
+        "override_tensor_pattern": "blk\\.(1[0-9]|[2-9][0-9])\\.ffn_.*_exps\\.=CPU",
         "temperature": 0.4,
         "timeout_seconds": 60,
         "auto_launch_server": True,
     },
     "voice": {
+        "engine_mode": "gemini",
+        "sample_rate": 24000,
+        "online_api_key": "",
+        "gemini_model": "gemini-2.5-flash-preview-tts",
+        "gemini_voice_name": "Kore",
+        "gooya_model_dir": "Data/Models/gooya",
+        "gooya_reference_audio": "Data/Models/gooya/speaker_reference.wav",
+        "gooya_exaggeration": 0.5,
+        "gooya_cfg_weight": 0.5,
+        "gooya_precision": "bf16",
+        "gooya_auto_unload": False,
+        "stt_model_dir": "Data/Models/whisper",
+        "stt_force_cpu": True,
         "wake_word": "hey_jarvis",
-        "threshold": 0.5,
-        "stt_model": "small",
-        "stt_device": "cpu",
-        "stt_compute_type": "int8",
-        "tts_model_path": "Data/Models/piper/fa_IR-gyro-medium.onnx",
-        "sample_rate": 16000,
-        "dsp_pitch_semitones": -2.5,
-        "dsp_metallic_mix": 0.22,
-        "dsp_reverb_decay": 0.18,
-    },
-    "network": {
-        "host": "0.0.0.0",
-        "port": 8765,
-        "ws_port": 8766,
-        "require_auth": True,
-        "token_file": "Configuration/auth_token.json",
-        "heartbeat_interval": 10,
+        "wake_threshold": 0.5,
+        "dsp_pitch_semitones": -0.3,
+        "dsp_metallic_mix": 0.0,
+        "dsp_reverb_mix": 0.0,
     },
     "memory": {
         "db_path": "Data/Memory/jarvis_memory.db",
@@ -72,6 +89,26 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "require_confirmation_for_sensitive": True,
         "allow_powershell": True,
         "audit_log_path": "Logs/security_audit.log",
+    },
+    "cloud_ai": {
+        "enabled": True,
+        "default_provider": "gemini",
+        "proxy_url": "",
+        "gemini_api_key": "",
+        "gemini_model": "gemini-2.5-flash",
+        "claude_api_key": "",
+        "claude_model": "claude-3-7-sonnet-latest",
+        "openai_api_key": "",
+        "openai_model": "gpt-4o",
+    },
+    "web_search": {
+        "enabled": True,
+        "provider": "auto",
+        "proxy_url": "",
+        "serper_api_key": "",
+        "google_api_key": "",
+        "google_cx": "",
+        "max_results": 4,
     },
 }
 
@@ -337,3 +374,28 @@ def load_config() -> bool:
 def save_config() -> bool:
     """Save configuration to file (convenience function)."""
     return get_config().save()
+
+
+if __name__ == '__main__':
+    import sys
+    print('=== ConfigLoader Self-Test ===')
+    cfg = get_config()
+    loaded = cfg.load()
+    print('[TEST] Config loaded:', loaded)
+    project_name = cfg.get('system', 'project_name')
+    version = cfg.get('system', 'version')
+    print(f'[TEST] System: {project_name} v{version}')
+    model = cfg.get('llama_cpp', 'target_model_name')
+    ot = cfg.get('llama_cpp', 'override_tensor_pattern')
+    print(f'[TEST] Model: {model}')
+    print(f'[TEST] Override tensor pattern: {ot}')
+    voice_engine = cfg.get('voice', 'engine_mode')
+    print(f'[TEST] Voice Engine: {voice_engine}')
+    errors = cfg.validate()
+    if errors:
+        print(f'[TEST FAIL] Validation errors: {errors}')
+        sys.exit(1)
+    else:
+        print('[TEST] Validation PASSED (0 errors)')
+    print('=== All ConfigLoader tests PASSED ===')
+    sys.exit(0)

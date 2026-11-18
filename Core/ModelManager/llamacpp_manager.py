@@ -1,7 +1,7 @@
-"""Llama.cpp CUDA Server Manager & Watchdog for JARVIS.
+"""Llama.cpp CUDA Server Manager & Watchdog for C.E.L.E.S.T.E.
 
-Manages llama-server.exe (CUDA 13.5) lifecycle and local Qwen 3.5 9B GGUF model,
-optimized for RTX 3080 + Ryzen 7 9700X.
+Manages llama-server.exe lifecycle and Gemma-4-26B-A4B MoE GGUF model,
+optimized for RTX 3080 (10GB VRAM) + Ryzen 7 9700X (32GB DDR5).
 """
 
 import subprocess
@@ -15,7 +15,7 @@ from typing import List, Optional
 # ---------------------------------------------------------------------------
 SERVER_HOST = '127.0.0.1'
 DEFAULT_SERVER_PORT = 8080
-DEFAULT_CONTEXT_LENGTH = 4096
+DEFAULT_CONTEXT_LENGTH = 16384
 HEALTH_URL = f'http://{SERVER_HOST}:{DEFAULT_SERVER_PORT}/health'
 BASE_URL = f'http://{SERVER_HOST}:{DEFAULT_SERVER_PORT}/v1'
 
@@ -45,7 +45,7 @@ class LlamaCppManager:
         return getattr(self, '_loaded_config', {})
 
     def _load_config(self) -> None:
-        """Load JARVIS config from Configuration/config.json."""
+        """Load C.E.L.E.S.T.E. config from Configuration/config.json."""
         try:
             import json
             project_root = Path(__file__).resolve().parent.parent.parent
@@ -56,12 +56,20 @@ class LlamaCppManager:
         except (FileNotFoundError, json.JSONDecodeError):
             # Fallback defaults if config file is missing or invalid
             self._loaded_config = {
+                'server_binary_path': 'llama-server.exe',
                 'server_exe_path': 'llama-server.exe',
-                'model_gguf_path': 'D:/AI/Models/qwen3.5-9b.gguf',
-                'n_gpu_layers': 99,
-                'context_length': 8192,
-                'cpu_threads': 8,
+                'model_gguf_path': 'D:/AI/Models/Gemma-4-26B-A4B-IQ4_XS/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf',
+                'target_model_name': 'Gemma 4 26B-A4B IT (IQ4_XS)',
+                'gpu_layers': 99,
+                'context_length': 16384,
+                'threads': 8,
+                'threads_batch': 12,
+                'batch_size': 2048,
+                'ubatch_size': 512,
                 'flash_attn': True,
+                'cache_type_k': 'q8_0',
+                'cache_type_v': 'q8_0',
+                'override_tensor_pattern': r'blk\.(1[0-9]|[2-9][0-9])\.ffn_.*_exps\.=CPU',
                 'host': SERVER_HOST,
                 'port': DEFAULT_SERVER_PORT,
             }
@@ -83,31 +91,47 @@ class LlamaCppManager:
     def _build_server_args(self, model_path: str) -> List[str]:
         """Build the full command-line arguments for llama-server.exe.
 
-        Reads context_length dynamically from config.json.
-        Falls back to default if not specified in config.
+        Supports Gemma-4-26B-A4B MoE offloading to RTX 3080 + Ryzen 7 9700X:
+        - passes -ngl, -c, -b, -ub, -t, -tb
+        - passes -fa on (if flash_attn is True)
+        - passes -ctk and -ctv (q8_0)
+        - passes -ot <override_tensor_pattern> (if set in config)
         """
+        gpu_layers = self._config.get('gpu_layers', self._config.get('n_gpu_layers', 99))
+        ctx_len = self._config.get('context_length', DEFAULT_CONTEXT_LENGTH)
+        batch = self._config.get('batch_size', 2048)
+        ubatch = self._config.get('ubatch_size', 512)
+        threads = self._config.get('threads', self._config.get('cpu_threads', 8))
+        threads_batch = self._config.get('threads_batch', 12)
+
         args = [
             '-m', str(model_path),
             '--host', str(self.host),
             '--port', str(self.port),
-            '-ngl', str(self._config.get('n_gpu_layers', 99)),
-            '-c', str(self._config.get('context_length', DEFAULT_CONTEXT_LENGTH)),
-            '-fa', 'on' if self._config.get('flash_attn', True) else 'off',
-            '--log-disable',
+            '-ngl', str(gpu_layers),
+            '-c', str(ctx_len),
+            '-b', str(batch),
+            '-ub', str(ubatch),
+            '-t', str(threads),
+            '-tb', str(threads_batch),
         ]
 
-        # Optional: CPU threads override
-        cpu_threads = self._config.get('cpu_threads')
-        if cpu_threads is not None:
-            args += ['-t', str(cpu_threads)]
+        if self._config.get('flash_attn', True):
+            args += ['-fa', 'on']
 
-        # Optional: kv_cache_type
-        kv_cache = self._config.get('kv_cache_type')
-        if kv_cache:
-            args += ['-ctk', str(kv_cache), '-ctv', str(kv_cache)]
+        cache_k = self._config.get('cache_type_k', self._config.get('kv_cache_type', 'q8_0'))
+        cache_v = self._config.get('cache_type_v', self._config.get('kv_cache_type', 'q8_0'))
+        if cache_k:
+            args += ['-ctk', str(cache_k)]
+        if cache_v:
+            args += ['-ctv', str(cache_v)]
 
+        ot_pattern = self._config.get('override_tensor_pattern')
+        if ot_pattern:
+            args += ['-ot', str(ot_pattern)]
+
+        args.append('--log-disable')
         return args
-
 
     # -------------------------------------------------------------------
     def is_server_running(self) -> bool:
@@ -130,7 +154,7 @@ class LlamaCppManager:
 
         Returns the absolute path to the executable, or raises FileNotFoundError.
         """
-        exe_name = self._config.get('server_exe_path', 'llama-server.exe')
+        exe_name = self._config.get('server_binary_path', self._config.get('server_exe_path', 'llama-server.exe'))
 
         # 1. Try config-specified path (absolute)
         if Path(exe_name).is_absolute() and Path(exe_name).exists():
@@ -157,12 +181,12 @@ class LlamaCppManager:
             f'Cannot find llama-server.exe in config or PATH.\n'
             f'Searched: {exe_name}\n'
             f'Please install via: choco install llama.cpp\n'
-            f'Or set "server_exe_path" in Configuration/config.json.'
+            f'Or set "server_binary_path" in Configuration/config.json.'
         )
 
     # -------------------------------------------------------------------
     def find_model_gguf(self) -> str:
-        """Locate the Qwen 3.5 9B GGUF model file on disk.
+        """Locate the target GGUF model file on disk.
 
         Searches config path first, then common model directories recursively.
         Returns absolute path or raises FileNotFoundError.
@@ -172,7 +196,7 @@ class LlamaCppManager:
         if config_path and Path(config_path).is_file():
             return str(Path(config_path))
 
-        # 2. Search common model directories for files matching "qwen" + "9b"
+        # 2. Search common model directories for files matching target model keywords
         project_root = Path(__file__).resolve().parent.parent.parent
         search_dirs = [
             project_root / 'Models',
@@ -187,19 +211,19 @@ class LlamaCppManager:
                 continue
             for gguf_file in search_dir.rglob('*.gguf'):
                 name_lower = gguf_file.name.lower()
-                if 'qwen' in name_lower and ('35b' in name_lower or '9b' in name_lower):
+                if ('gemma' in name_lower and '26b' in name_lower) or ('qwen' in name_lower and ('35b' in name_lower or '9b' in name_lower)):
                     return str(gguf_file)
 
         # 3. Last resort: try the config path even if it doesn't exist yet
         if config_path:
             raise FileNotFoundError(
                 f'Model file not found at configured path:\n{config_path}\n\n'
-                'Please download Qwen 3.5 9B GGUF (e.g., from HuggingFace)\n'
+                'Please download the target GGUF model\n'
                 'and place it there, or update config.json.'
             )
 
         raise FileNotFoundError(
-            'Could not find any Qwen *9b*.gguf file in known model directories.\n'
+            'Could not find any matching .gguf file in known model directories.\n'
             f'Searched: {[str(d) for d in search_dirs]}'
         )
 
@@ -479,6 +503,19 @@ if __name__ == '__main__':
     expected_prefix = ['-m', str(test_model)]
     assert args[:2] == expected_prefix, f'FAIL: expected {expected_prefix}, got {args[:2]}'
     print('[TEST] Command prefix matches expected format:', expected_prefix)
+
+    # Test 6: Verify MoE offloading and optimization flags (-ngl, -c, -b, -ub, -t, -tb, -fa, -ctk, -ctv, -ot)
+    for flag in ('-ngl', '-c', '-b', '-ub', '-t', '-tb', '-fa', '-ctk', '-ctv', '-ot'):
+        assert flag in args, f'FAIL: required flag {flag} missing from command args'
+    fa_idx = args.index('-fa')
+    assert args[fa_idx + 1] == 'on', 'FAIL: -fa should be on'
+    ctk_idx = args.index('-ctk')
+    assert args[ctk_idx + 1] == 'q8_0', 'FAIL: -ctk should be q8_0'
+    ctv_idx = args.index('-ctv')
+    assert args[ctv_idx + 1] == 'q8_0', 'FAIL: -ctv should be q8_0'
+    ot_idx = args.index('-ot')
+    assert args[ot_idx + 1] == r'blk\.(1[0-9]|[2-9][0-9])\.ffn_.*_exps\.=CPU', 'FAIL: -ot pattern mismatch'
+    print('[TEST] MoE offloading & Gemma-4-26B-A4B flags verified (-ngl, -c, -b, -ub, -t, -tb, -fa on, -ctk, -ctv, -ot)')
 
     print('\n=== All self-tests PASSED ===')
 

@@ -22,10 +22,10 @@ def _build_watchdog_path() -> Path:
 
 
 def _check_api_health(timeout: float = 3.0) -> bool:
-    """Check if /api/v1/status responds within timeout."""
+    """Check if /api/v1/health responds within timeout."""
     try:
         import urllib.request
-        req = urllib.request.Request("http://127.0.0.1:8765/api/v1/status")
+        req = urllib.request.Request("http://127.0.0.1:8765/api/v1/health")
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status == 200
     except Exception:
@@ -80,7 +80,7 @@ def run_watchdog(test_once: bool = False) -> None:
             try:
                 healthy = _check_api_health(timeout=2.0)
                 if not healthy:
-                    _logger.info("API /api/v1/status unhealthy (process still running)")
+                    _logger.info("API /api/v1/health unhealthy (process still running)")
             except Exception as exc:
                 _logger.debug("Health check error: %s", exc)
             time.sleep(5)

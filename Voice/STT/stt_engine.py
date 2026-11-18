@@ -1,11 +1,13 @@
 """JARVIS Voice - Offline Speech-to-Text Engine (Stage 3.1)"""
+import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 import numpy as np
 from faster_whisper import WhisperModel
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+CONFIG_PATH = PROJECT_ROOT / 'Configuration' / 'config.json'
 logger = logging.getLogger(__name__)
 
 class STTEngine:
@@ -45,7 +47,19 @@ class STTEngine:
             pass
         return "cpu"
 
-    def _select_optimal_device(self):
+    def _select_optimal_device(self) -> Tuple[str, str, int]:
+        stt_force_cpu = True
+        try:
+            if CONFIG_PATH.exists():
+                cfg_data = json.loads(CONFIG_PATH.read_text(encoding='utf-8'))
+                stt_force_cpu = cfg_data.get('voice', {}).get('stt_force_cpu', True)
+        except Exception as exc:
+            logger.debug('Failed reading config for stt_force_cpu: %s', exc)
+
+        if stt_force_cpu:
+            logger.info('STT engine locked to CPU via config (voice.stt_force_cpu=true)')
+            return 'cpu', 'int8', 8
+
         try:
             import pynvml
             pynvml.nvmlInit()
@@ -53,24 +67,46 @@ class STTEngine:
             info = pynvml.nvmlDeviceGetMemoryInfo(handle)
             free_mb = info.free / (1024 * 1024)
             pynvml.nvmlShutdown()
-            if free_mb >= 2400:
-                return "cuda", "int8_float16", 8
+            if free_mb >= 3800:
+                return 'cuda', 'int8_float16', 8
+            logger.info('Free VRAM (%.1f MB) < 3800 MB threshold, locking STT to CPU', free_mb)
         except Exception as exc:
-            logger.debug("pynvml unavailable (%s), falling back to CPU", exc)
-        return "cpu", "int8", 8
+            logger.debug('pynvml unavailable (%s), falling back to CPU', exc)
+        return 'cpu', 'int8', 8
 
     def initialize(self):
         if self._initialized and self._model is not None:
-            logger.info("STT engine already initialized")
+            logger.info('STT engine already initialized')
             return True
+
+        stt_force_cpu = False
+        try:
+            if CONFIG_PATH.exists():
+                cfg_data = json.loads(CONFIG_PATH.read_text(encoding='utf-8'))
+                stt_force_cpu = cfg_data.get('voice', {}).get('stt_force_cpu', False)
+        except Exception:
+            pass
+
         device = self._device
-        if device == "auto":
-            device = self._detect_device()
-            logger.info("Auto-detected device: %s", device)
         compute_type = self._compute_type
-        if device == "cuda" and compute_type == "int8":
-            compute_type = "float16"
-            logger.info("Switched compute_type to float16 for CUDA")
+        cpu_threads = self._cpu_threads
+
+        if device == 'auto':
+            device, compute_type, cpu_threads = self._select_optimal_device()
+            logger.info('Auto-selected device: %s, compute_type: %s, threads: %d', device, compute_type, cpu_threads)
+        elif stt_force_cpu and device == 'cuda':
+            logger.info('Overriding device to CPU due to voice.stt_force_cpu=true')
+            device = 'cpu'
+            compute_type = 'int8'
+            cpu_threads = 8
+
+        if device == 'cuda' and compute_type == 'int8':
+            compute_type = 'float16'
+            logger.info('Switched compute_type to float16 for CUDA')
+
+        self._device = device
+        self._compute_type = compute_type
+        self._cpu_threads = cpu_threads
         try:
             self._model = WhisperModel(
                 self._model_size, device=device, compute_type=compute_type,

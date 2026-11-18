@@ -22,6 +22,7 @@ class WakeWordEngine:
         self._speech_recorded_callback = speech_recorded_callback or (lambda pcm: None)
         self._muted = False
         self._audio_source = 'mic'
+        self._wake_threshold = 0.5
         self._model = None
         self._ring = collections.deque(maxlen=160000)
         self._recording = []
@@ -80,6 +81,12 @@ class WakeWordEngine:
     def is_muted(self) -> bool:
         return self._muted
 
+    def set_wake_threshold(self, threshold: float):
+        self._wake_threshold = float(threshold)
+
+    def get_wake_threshold(self) -> float:
+        return self._wake_threshold
+
     def get_current_rms(self) -> float:
         if not self._ring:
             return 0.0
@@ -109,8 +116,9 @@ class WakeWordEngine:
     def _check_wake_word(self, chunk: bytes):
         arr = np.frombuffer(chunk, dtype=np.int16)
         scores = self._model.predict(x=arr)
+        threshold = getattr(self, '_wake_threshold', 0.5)
         for ww_name, score in scores.items():
-            if score >= 0.5:
+            if score >= threshold:
                 logger.info('Wake-word detected: %s (score=%.4f)', ww_name, score)
                 self._on_wake_word_detected(ww_name)
                 self._capture_response(chunk)
