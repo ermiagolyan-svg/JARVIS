@@ -33,7 +33,7 @@ public class SystemStatusModel
     public bool ModelLoaded { get; set; }
 
     [JsonPropertyName("model_name")]
-    public string ModelName { get; set; } = "Qwen 3.5 9B";
+    public string ModelName { get; set; } = "Gemma 4 26B-A4B IT (IQ4_XS)";
 
     [JsonPropertyName("lumia_connected")]
     public bool LumiaConnected { get; set; }
@@ -244,14 +244,53 @@ public class LogsResponse
 
 public class VoiceConfigModel
 {
+    [JsonPropertyName("engine_mode")]
+    public string EngineMode { get; set; } = "gemini";
+
+    [JsonPropertyName("online_api_key")]
+    public string OnlineApiKey { get; set; } = "";
+
+    [JsonPropertyName("gemini_model")]
+    public string GeminiModel { get; set; } = "gemini-2.5-flash-preview-tts";
+
+    [JsonPropertyName("gemini_voice_name")]
+    public string GeminiVoiceName { get; set; } = "Kore";
+
+    [JsonPropertyName("gooya_model_dir")]
+    public string GooyaModelDir { get; set; } = "Data/Models/gooya";
+
+    [JsonPropertyName("gooya_reference_audio")]
+    public string GooyaReferenceAudio { get; set; } = "Data/Models/gooya/speaker_reference.wav";
+
+    [JsonPropertyName("gooya_exaggeration")]
+    public double GooyaExaggeration { get; set; } = 0.50;
+
+    [JsonPropertyName("gooya_cfg_weight")]
+    public double GooyaCfgWeight { get; set; } = 0.50;
+
+    [JsonPropertyName("gooya_precision")]
+    public string GooyaPrecision { get; set; } = "bf16";
+
+    [JsonPropertyName("gooya_auto_unload")]
+    public bool GooyaAutoUnload { get; set; } = false;
+
     [JsonPropertyName("pitch_semitones")]
-    public double PitchSemitones { get; set; } = -2.5;
+    public double PitchSemitones { get; set; } = -0.3;
+
+    [JsonPropertyName("dsp_pitch_semitones")]
+    public double DspPitchSemitones { get; set; } = -0.3;
 
     [JsonPropertyName("metallic_mix")]
-    public double MetallicMix { get; set; } = 0.22;
+    public double MetallicMix { get; set; } = 0.0;
+
+    [JsonPropertyName("dsp_metallic_mix")]
+    public double DspMetallicMix { get; set; } = 0.0;
 
     [JsonPropertyName("reverb_decay")]
-    public double ReverbDecay { get; set; } = 0.18;
+    public double ReverbDecay { get; set; } = 0.0;
+
+    [JsonPropertyName("dsp_reverb_mix")]
+    public double DspReverbMix { get; set; } = 0.0;
 
     [JsonPropertyName("wake_threshold")]
     public double WakeThreshold { get; set; } = 0.50;

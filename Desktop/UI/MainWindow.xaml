@@ -364,57 +364,140 @@
                     </DockPanel>
 
                     <TabControl Grid.Row="1">
-                        <!-- TAB 1: CYBER-ICE VOCAL DSP -->
-                        <TabItem Header="VOCAL DSP">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,8,4,4">
+                        <!-- TAB 1: DUAL-ENGINE TTS & CYBER-ICE VOCAL DSP -->
+                        <TabItem Header="VOICE &amp; TTS">
+                            <ScrollViewer Padding="4,8,4,4" VerticalScrollBarVisibility="Auto">
                                 <StackPanel>
-                                    <TextBlock Text="CYBER-ICE VOCAL CHAIN (DSP)" Foreground="{DynamicResource CyanSecondaryBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,4"/>
-                                    <TextBlock Text="Rate 1.06x  •  HPF 95Hz  •  +2.5dB @ 3.5kHz  •  Studio Reverb"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,14"/>
+                                    <TextBlock FontSize="13" FontWeight="Bold" Foreground="{DynamicResource CyanSecondaryBrush}" Margin="0,0,0,4" Text="DUAL-ENGINE TTS SYNTHESIS PIPELINE"/>
+                                    <TextBlock FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,10" Text="Switch between Gemini Online Cloud TTS and Gooya Bozorg v1.5 Local GPU" TextWrapping="Wrap"/>
 
-                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,10">
+                                    <!-- ENGINE MODE SELECTOR -->
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Margin="0,0,0,10" Padding="12">
                                         <StackPanel>
-                                            <DockPanel Margin="0,0,0,8">
-                                                <TextBlock Text="Pitch Shift (Semitones)" FontWeight="SemiBold" FontSize="12"/>
-                                                <TextBlock x:Name="LblPitchVal" Text="-0.3" Foreground="{DynamicResource CyanSecondaryBrush}" FontFamily="Consolas" FontWeight="Bold" HorizontalAlignment="Right"/>
-                                            </DockPanel>
-                                            <Slider x:Name="SldPitch" Minimum="-4.0" Maximum="2.0" Value="-0.3" TickFrequency="0.1" IsSnapToTickEnabled="True" ValueChanged="VoiceSlider_ValueChanged"/>
+                                            <TextBlock FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" Text="Active Speech Synthesis Engine"/>
+                                            <ComboBox Background="#121C2E" BorderBrush="{DynamicResource BtnDefaultBorderBrush}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Padding="8,6" SelectedIndex="0" SelectionChanged="CmbVoiceEngineMode_SelectionChanged" x:Name="CmbVoiceEngineMode">
+                                                <ComboBoxItem Content="GEMINI ONLINE (Cloud Neural TTS - Zero VRAM)" Tag="gemini"/>
+                                                <ComboBoxItem Content="GOOYA BOZORG v1.5 (Local RTX 3080 - Chatterbox 801M)" Tag="gooya"/>
+                                            </ComboBox>
                                         </StackPanel>
                                     </Border>
 
-                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,10">
+                                    <!-- PANEL A: GEMINI ONLINE TTS SETTINGS -->
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Margin="0,0,0,10" Padding="12" x:Name="PnlGeminiVoiceSettings">
                                         <StackPanel>
-                                            <DockPanel Margin="0,0,0,8">
-                                                <TextBlock Text="Crystal Presence &amp; Air Mix" FontWeight="SemiBold" FontSize="12"/>
-                                                <TextBlock x:Name="LblMetallicVal" Text="0.10" Foreground="{DynamicResource CyanSecondaryBrush}" FontFamily="Consolas" FontWeight="Bold" HorizontalAlignment="Right"/>
-                                            </DockPanel>
-                                            <Slider x:Name="SldMetallic" Minimum="0.0" Maximum="0.50" Value="0.10" TickFrequency="0.02" IsSnapToTickEnabled="True" ValueChanged="VoiceSlider_ValueChanged"/>
+                                            <TextBlock FontSize="11.5" FontWeight="Bold" Foreground="{DynamicResource CyanPrimaryBrush}" Margin="0,0,0,8" Text="GEMINI ONLINE TTS CONFIGURATION"/>
+
+                                            <TextBlock FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4" Text="Dedicated Voice Gemini API Key (Optional override)"/>
+                                            <TextBox Background="#0D1524" BorderBrush="{DynamicResource BtnDefaultBorderBrush}" FontFamily="Consolas" FontSize="11.5" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,8" Padding="8,5" x:Name="TxtVoiceOnlineApiKey"/>
+
+                                            <Grid Margin="0,0,0,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="1.2*"/>
+                                                    <ColumnDefinition Width="8"/>
+                                                    <ColumnDefinition Width="1*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4" Text="Gemini TTS Model ID"/>
+                                                    <TextBox Background="#0D1524" BorderBrush="{DynamicResource BtnDefaultBorderBrush}" FontFamily="Consolas" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}" Padding="6,5" Text="gemini-2.5-flash-preview-tts" x:Name="TxtGeminiTtsModel"/>
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Column="2">
+                                                    <TextBlock FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4" Text="Voice Profile"/>
+                                                    <ComboBox Background="#0D1524" BorderBrush="{DynamicResource BtnDefaultBorderBrush}" FontSize="11.5" Foreground="{DynamicResource TextPrimaryBrush}" Padding="6,4" SelectedIndex="0" x:Name="CmbGeminiVoiceName">
+                                                        <ComboBoxItem Content="Kore (Default)" Tag="Kore"/>
+                                                        <ComboBoxItem Content="Aoede" Tag="Aoede"/>
+                                                        <ComboBoxItem Content="Puck" Tag="Puck"/>
+                                                        <ComboBoxItem Content="Charon" Tag="Charon"/>
+                                                        <ComboBoxItem Content="Fenrir" Tag="Fenrir"/>
+                                                        <ComboBoxItem Content="Leda" Tag="Leda"/>
+                                                        <ComboBoxItem Content="Orus" Tag="Orus"/>
+                                                        <ComboBoxItem Content="Zephyr" Tag="Zephyr"/>
+                                                    </ComboBox>
+                                                </StackPanel>
+                                            </Grid>
                                         </StackPanel>
                                     </Border>
 
-                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,10">
+                                    <!-- PANEL B: GOOYA LOCAL GPU TTS SETTINGS -->
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Margin="0,0,0,10" Padding="12" Visibility="Collapsed" x:Name="PnlGooyaVoiceSettings">
                                         <StackPanel>
-                                            <DockPanel Margin="0,0,0,8">
-                                                <TextBlock Text="Tight Studio Room Reverb (8%-12%)" FontWeight="SemiBold" FontSize="12"/>
-                                                <TextBlock x:Name="LblReverbVal" Text="0.10" Foreground="{DynamicResource CyanSecondaryBrush}" FontFamily="Consolas" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                            <TextBlock FontSize="11.5" FontWeight="Bold" Foreground="{DynamicResource CyanSecondaryBrush}" Margin="0,0,0,8" Text="GOOYA BOZORG v1.5 LOCAL ENGINE (SDPA + AMPERE)"/>
+
+                                            <TextBlock FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4" Text="Speaker Reference Audio (.wav prompt)"/>
+                                            <DockPanel Margin="0,0,0,10">
+                                                <Button Click="BtnBrowseGooyaRef_Click" Content="BROWSE" DockPanel.Dock="Right" Margin="6,0,0,0" Padding="10,4" Style="{StaticResource HoloButtonStyle}"/>
+                                                <TextBox Background="#0D1524" BorderBrush="{DynamicResource BtnDefaultBorderBrush}" FontFamily="Consolas" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}" Padding="6,5" Text="Data/Models/gooya/speaker_reference.wav" x:Name="TxtGooyaRefAudio"/>
                                             </DockPanel>
-                                            <Slider x:Name="SldReverb" Minimum="0.0" Maximum="0.50" Value="0.10" TickFrequency="0.02" IsSnapToTickEnabled="True" ValueChanged="VoiceSlider_ValueChanged"/>
+
+                                            <DockPanel Margin="0,0,0,4">
+                                                <TextBlock FontSize="11.5" FontWeight="SemiBold" Text="Exaggeration (Emotion &amp; Pitch Variance)"/>
+                                                <TextBlock FontFamily="Consolas" FontWeight="Bold" Foreground="{DynamicResource CyanSecondaryBrush}" HorizontalAlignment="Right" Text="0.50" x:Name="LblGooyaExagVal"/>
+                                            </DockPanel>
+                                            <Slider IsSnapToTickEnabled="True" Margin="0,0,0,10" Maximum="1.0" Minimum="0.0" TickFrequency="0.05" Value="0.50" ValueChanged="VoiceSlider_ValueChanged" x:Name="SldGooyaExaggeration"/>
+
+                                            <DockPanel Margin="0,0,0,4">
+                                                <TextBlock FontSize="11.5" FontWeight="SemiBold" Text="CFG Weight (Flow-Matching Fidelity)"/>
+                                                <TextBlock FontFamily="Consolas" FontWeight="Bold" Foreground="{DynamicResource CyanSecondaryBrush}" HorizontalAlignment="Right" Text="0.50" x:Name="LblGooyaCfgVal"/>
+                                            </DockPanel>
+                                            <Slider IsSnapToTickEnabled="True" Margin="0,0,0,10" Maximum="1.0" Minimum="0.0" TickFrequency="0.05" Value="0.50" ValueChanged="VoiceSlider_ValueChanged" x:Name="SldGooyaCfgWeight"/>
+
+                                            <TextBlock FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4" Text="VRAM Precision &amp; Memory Policy"/>
+                                            <ComboBox Background="#0D1524" BorderBrush="{DynamicResource BtnDefaultBorderBrush}" FontSize="11.5" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,8" Padding="6,4" SelectedIndex="0" x:Name="CmbGooyaPrecision">
+                                                <ComboBoxItem Content="BFloat16 Mixed Precision (~1.6 GB VRAM - Recommended)" Tag="bf16"/>
+                                                <ComboBoxItem Content="Float32 Full Precision (~3.2 GB VRAM)" Tag="fp32"/>
+                                            </ComboBox>
+
+                                            <CheckBox Content="Auto-Unload Gooya from VRAM after speech (Max VRAM for Gemma-4)" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,2,0,0" x:Name="ChkGooyaAutoUnload"/>
                                         </StackPanel>
                                     </Border>
 
-                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,16">
+                                    <!-- CYBER-ICE VOCAL DSP MASTERING CHAIN -->
+                                    <TextBlock FontSize="12.5" FontWeight="Bold" Foreground="{DynamicResource CyanSecondaryBrush}" Margin="0,4,0,6" Text="CYBER-ICE VOCAL MASTERING CHAIN (DSP)"/>
+
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Margin="0,0,0,8" Padding="12">
                                         <StackPanel>
-                                            <DockPanel Margin="0,0,0,8">
-                                                <TextBlock Text="Wake-Word Sensitivity" FontWeight="SemiBold" FontSize="12"/>
-                                                <TextBlock x:Name="LblWakeVal" Text="0.50" Foreground="{DynamicResource CyanPrimaryBrush}" FontFamily="Consolas" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                            <DockPanel Margin="0,0,0,6">
+                                                <TextBlock FontSize="11.5" FontWeight="SemiBold" Text="Pitch Shift (Semitones)"/>
+                                                <TextBlock FontFamily="Consolas" FontWeight="Bold" Foreground="{DynamicResource CyanSecondaryBrush}" HorizontalAlignment="Right" Text="-0.3" x:Name="LblPitchVal"/>
                                             </DockPanel>
-                                            <Slider x:Name="SldWakeThreshold" Minimum="0.15" Maximum="0.90" Value="0.50" TickFrequency="0.05" IsSnapToTickEnabled="True" ValueChanged="VoiceSlider_ValueChanged"/>
+                                            <Slider IsSnapToTickEnabled="True" Maximum="2.0" Minimum="-4.0" TickFrequency="0.1" Value="-0.3" ValueChanged="VoiceSlider_ValueChanged" x:Name="SldPitch"/>
                                         </StackPanel>
                                     </Border>
 
-                                    <Button Content="APPLY CYBER-ICE VOCAL PROFILE" Style="{StaticResource HoloButtonStyle}" Margin="0,0,0,8" Click="BtnApplyVoiceConfig_Click"/>
-                                    <Button Content="🔊  TEST CELESTE VOICE SYNTHESIS" Style="{StaticResource HoloSuccessButtonStyle}" Click="BtnTestVoice_Click"/>
-                                    <TextBlock x:Name="TxtVoiceConfigResult" Text="" Foreground="{DynamicResource CyanSecondaryBrush}" FontSize="11.5" Margin="0,10,0,0"/>
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Margin="0,0,0,8" Padding="12">
+                                        <StackPanel>
+                                            <DockPanel Margin="0,0,0,6">
+                                                <TextBlock FontSize="11.5" FontWeight="SemiBold" Text="Crystal Presence &amp; Air Mix"/>
+                                                <TextBlock FontFamily="Consolas" FontWeight="Bold" Foreground="{DynamicResource CyanSecondaryBrush}" HorizontalAlignment="Right" Text="0.00" x:Name="LblMetallicVal"/>
+                                            </DockPanel>
+                                            <Slider IsSnapToTickEnabled="True" Maximum="0.50" Minimum="0.0" TickFrequency="0.02" Value="0.00" ValueChanged="VoiceSlider_ValueChanged" x:Name="SldMetallic"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Margin="0,0,0,8" Padding="12">
+                                        <StackPanel>
+                                            <DockPanel Margin="0,0,0,6">
+                                                <TextBlock FontSize="11.5" FontWeight="SemiBold" Text="Tight Studio Room Reverb"/>
+                                                <TextBlock FontFamily="Consolas" FontWeight="Bold" Foreground="{DynamicResource CyanSecondaryBrush}" HorizontalAlignment="Right" Text="0.00" x:Name="LblReverbVal"/>
+                                            </DockPanel>
+                                            <Slider IsSnapToTickEnabled="True" Maximum="0.50" Minimum="0.0" TickFrequency="0.02" Value="0.00" ValueChanged="VoiceSlider_ValueChanged" x:Name="SldReverb"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="10" Margin="0,0,0,12" Padding="12">
+                                        <StackPanel>
+                                            <DockPanel Margin="0,0,0,6">
+                                                <TextBlock FontSize="11.5" FontWeight="SemiBold" Text="Wake-Word Sensitivity"/>
+                                                <TextBlock FontFamily="Consolas" FontWeight="Bold" Foreground="{DynamicResource CyanPrimaryBrush}" HorizontalAlignment="Right" Text="0.50" x:Name="LblWakeVal"/>
+                                            </DockPanel>
+                                            <Slider IsSnapToTickEnabled="True" Maximum="0.90" Minimum="0.15" TickFrequency="0.05" Value="0.50" ValueChanged="VoiceSlider_ValueChanged" x:Name="SldWakeThreshold"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Button Click="BtnApplyVoiceConfig_Click" Content="APPLY VOICE &amp; ENGINE CONFIGURATION" Margin="0,0,0,8" Style="{StaticResource HoloButtonStyle}"/>
+                                    <Button Click="BtnTestVoice_Click" Content="🔊  TEST CELESTE VOICE SYNTHESIS" Style="{StaticResource HoloSuccessButtonStyle}"/>
+                                    <TextBlock FontSize="11.5" Foreground="{DynamicResource CyanSecondaryBrush}" Margin="0,10,0,0" Text="" TextWrapping="Wrap" x:Name="TxtVoiceConfigResult"/>
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>

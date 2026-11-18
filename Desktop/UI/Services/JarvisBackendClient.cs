@@ -306,6 +306,15 @@ public class JarvisBackendClient : IDisposable
         catch { return null; }
     }
 
+    public async Task<VoiceConfigModel?> GetVoiceConfigAsync()
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<VoiceConfigModel>("/api/v1/voice/config", JsonOpts);
+        }
+        catch { return null; }
+    }
+
     public async Task<bool> UpdateVoiceConfigAsync(VoiceConfigModel config)
     {
         try

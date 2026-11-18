@@ -890,6 +890,7 @@ public partial class MainWindow : Window
         await LoadHistoryAndFactsAsync();
         await RefreshSecurityAuditAsync();
         await RefreshLogsAsync();
+        _ = LoadVoiceConfigFromBackendAsync();
     }
 
     private async Task PollBackendSubsystemsAsync()
@@ -1214,33 +1215,140 @@ public partial class MainWindow : Window
         await RefreshSecurityAuditAsync();
     }
 
+    private async Task LoadVoiceConfigFromBackendAsync()
+    {
+        try
+        {
+            var cfg = await _client.GetVoiceConfigAsync();
+            if (cfg == null) return;
+
+            string mode = (cfg.EngineMode ?? "gemini").Trim().ToLowerInvariant();
+            CmbVoiceEngineMode.SelectedIndex = (mode == "gooya" || mode == "local") ? 1 : 0;
+            UpdateVoiceEnginePanelsVisibility();
+
+            TxtVoiceOnlineApiKey.Text = cfg.OnlineApiKey ?? "";
+            TxtGeminiTtsModel.Text = string.IsNullOrWhiteSpace(cfg.GeminiModel)
+                ? "gemini-2.5-flash-preview-tts"
+                : cfg.GeminiModel;
+
+            string voiceName = string.IsNullOrWhiteSpace(cfg.GeminiVoiceName) ? "Kore" : cfg.GeminiVoiceName.Trim();
+            for (int i = 0; i < CmbGeminiVoiceName.Items.Count; i++)
+            {
+                if (CmbGeminiVoiceName.Items[i] is ComboBoxItem item &&
+                    string.Equals(item.Tag?.ToString(), voiceName, StringComparison.OrdinalIgnoreCase))
+                {
+                    CmbGeminiVoiceName.SelectedIndex = i;
+                    break;
+                }
+            }
+
+            TxtGooyaRefAudio.Text = string.IsNullOrWhiteSpace(cfg.GooyaReferenceAudio)
+                ? "Data/Models/gooya/speaker_reference.wav"
+                : cfg.GooyaReferenceAudio;
+            SldGooyaExaggeration.Value = Math.Clamp(cfg.GooyaExaggeration, 0.0, 1.0);
+            SldGooyaCfgWeight.Value = Math.Clamp(cfg.GooyaCfgWeight, 0.0, 1.0);
+
+            string prec = (cfg.GooyaPrecision ?? "bf16").Trim().ToLowerInvariant();
+            CmbGooyaPrecision.SelectedIndex = (prec == "fp32" || prec == "float32") ? 1 : 0;
+            ChkGooyaAutoUnload.IsChecked = cfg.GooyaAutoUnload;
+
+            double pitch = cfg.DspPitchSemitones != 0 ? cfg.DspPitchSemitones : cfg.PitchSemitones;
+            double metallic = cfg.DspMetallicMix != 0 ? cfg.DspMetallicMix : cfg.MetallicMix;
+            double reverb = cfg.DspReverbMix != 0 ? cfg.DspReverbMix : cfg.ReverbDecay;
+
+            SldPitch.Value = Math.Clamp(pitch, -4.0, 2.0);
+            SldMetallic.Value = Math.Clamp(metallic, 0.0, 0.50);
+            SldReverb.Value = Math.Clamp(reverb, 0.0, 0.50);
+            SldWakeThreshold.Value = Math.Clamp(cfg.WakeThreshold, 0.15, 0.90);
+        }
+        catch { }
+    }
+
+    private void CmbVoiceEngineMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        UpdateVoiceEnginePanelsVisibility();
+    }
+
+    private void UpdateVoiceEnginePanelsVisibility()
+    {
+        if (PnlGeminiVoiceSettings == null || PnlGooyaVoiceSettings == null || CmbVoiceEngineMode == null)
+            return;
+
+        bool isGooya = CmbVoiceEngineMode.SelectedIndex == 1;
+        PnlGeminiVoiceSettings.Visibility = isGooya ? Visibility.Collapsed : Visibility.Visible;
+        PnlGooyaVoiceSettings.Visibility = isGooya ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void BtnBrowseGooyaRef_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Select Speaker Reference Audio (.wav) for Gooya TTS",
+            Filter = "WAV Audio Files (*.wav)|*.wav|All Files (*.*)|*.*",
+            CheckFileExists = true
+        };
+        if (dlg.ShowDialog() == true)
+        {
+            TxtGooyaRefAudio.Text = dlg.FileName;
+        }
+    }
+
     private void VoiceSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (!IsLoaded) return;
-        LblPitchVal.Text = SldPitch.Value.ToString("0.0");
-        LblMetallicVal.Text = SldMetallic.Value.ToString("0.00");
-        LblReverbVal.Text = SldReverb.Value.ToString("0.00");
-        LblWakeVal.Text = SldWakeThreshold.Value.ToString("0.00");
+        if (LblPitchVal != null && SldPitch != null) LblPitchVal.Text = SldPitch.Value.ToString("0.0");
+        if (LblMetallicVal != null && SldMetallic != null) LblMetallicVal.Text = SldMetallic.Value.ToString("0.00");
+        if (LblReverbVal != null && SldReverb != null) LblReverbVal.Text = SldReverb.Value.ToString("0.00");
+        if (LblWakeVal != null && SldWakeThreshold != null) LblWakeVal.Text = SldWakeThreshold.Value.ToString("0.00");
+        if (LblGooyaExagVal != null && SldGooyaExaggeration != null) LblGooyaExagVal.Text = SldGooyaExaggeration.Value.ToString("0.00");
+        if (LblGooyaCfgVal != null && SldGooyaCfgWeight != null) LblGooyaCfgVal.Text = SldGooyaCfgWeight.Value.ToString("0.00");
     }
 
     private async void BtnApplyVoiceConfig_Click(object sender, RoutedEventArgs e)
     {
+        string engineMode = (CmbVoiceEngineMode.SelectedItem is ComboBoxItem modeItem && modeItem.Tag != null)
+            ? modeItem.Tag.ToString()!
+            : (CmbVoiceEngineMode.SelectedIndex == 1 ? "gooya" : "gemini");
+
+        string geminiVoice = (CmbGeminiVoiceName.SelectedItem is ComboBoxItem voiceItem && voiceItem.Tag != null)
+            ? voiceItem.Tag.ToString()!
+            : "Kore";
+
+        string gooyaPrecision = (CmbGooyaPrecision.SelectedItem is ComboBoxItem precItem && precItem.Tag != null)
+            ? precItem.Tag.ToString()!
+            : "bf16";
+
         var cfg = new VoiceConfigModel
         {
+            EngineMode = engineMode,
+            OnlineApiKey = TxtVoiceOnlineApiKey.Text.Trim(),
+            GeminiModel = string.IsNullOrWhiteSpace(TxtGeminiTtsModel.Text) ? "gemini-2.5-flash-preview-tts" : TxtGeminiTtsModel.Text.Trim(),
+            GeminiVoiceName = geminiVoice,
+            GooyaModelDir = "Data/Models/gooya",
+            GooyaReferenceAudio = string.IsNullOrWhiteSpace(TxtGooyaRefAudio.Text) ? "Data/Models/gooya/speaker_reference.wav" : TxtGooyaRefAudio.Text.Trim(),
+            GooyaExaggeration = SldGooyaExaggeration.Value,
+            GooyaCfgWeight = SldGooyaCfgWeight.Value,
+            GooyaPrecision = gooyaPrecision,
+            GooyaAutoUnload = ChkGooyaAutoUnload.IsChecked == true,
             PitchSemitones = SldPitch.Value,
+            DspPitchSemitones = SldPitch.Value,
             MetallicMix = SldMetallic.Value,
+            DspMetallicMix = SldMetallic.Value,
             ReverbDecay = SldReverb.Value,
+            DspReverbMix = SldReverb.Value,
             WakeThreshold = SldWakeThreshold.Value
         };
+
         bool ok = await _client.UpdateVoiceConfigAsync(cfg);
         TxtVoiceConfigResult.Text = ok
-            ? $"[OK] Cyber-Ice Vocal Chain applied ({DateTime.Now:HH:mm:ss})"
-            : "[WARN] Failed to update vocal parameters";
+            ? $"[OK] Active Engine: {engineMode.ToUpperInvariant()} | Vocal & VRAM Profile applied ({DateTime.Now:HH:mm:ss})"
+            : "[WARN] Failed to update voice & engine configuration";
     }
 
     private async void BtnTestVoice_Click(object sender, RoutedEventArgs e)
     {
-        var res = await _client.SendChatAsync("سلست، وضعیت کالبد پردازشی و سیستم صوتی خودت را گزارش بده.", "desktop");
+        var res = await _client.SendChatAsync("سلست، وضعیت کالبد پردازشی و موتور صوتی فعال خودت را گزارش بده.", "desktop");
         if (res != null && !string.IsNullOrWhiteSpace(res.EffectiveText))
         {
             AppendChatMessage("C.E.L.E.S.T.E.", res.EffectiveText);
