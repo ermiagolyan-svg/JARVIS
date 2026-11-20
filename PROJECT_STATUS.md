@@ -1,8 +1,8 @@
-﻿# C.E.L.E.S.T.E. v2.0 Project Status
+# C.E.L.E.S.T.E. v2.0 Project Status
 **System:** C.E.L.E.S.T.E. v2.0 (*Cognitive Engineering & Logic Execution System for Tactical Engagements*)  
 **Architecture:** Multi-Process Hybrid (Python 3.14 x64 Core Daemon + .NET 8 WPF Holographic HUD Client)  
 **Target Runtime LLM:** Gemma-4-26B-A4B-IT (`gemma-4-26B-A4B-it-UD-IQ4_XS.gguf`) with hybrid RTX 3080 + Ryzen 7 9700X DDR5 MoE tensor offloading (`-ot`)  
-**Voice Pipeline:** Dual-Engine TTS (Gemini Online TTS + Gooya Bozorg v1.5 Local TTS with BF16/SDPA & Dynamic VRAM Unloading) + Faster-Whisper STT (CPU Lock) + CelesteAudioDSP  
+**Voice Pipeline:** Dual-Engine TTS (Gemini Online TTS + Gooya Bozorg v1.5 Local TTS with Hybrid BF16/FP32+TF32, Dynamic Runway Pipelining, Gapless sounddevice Playback & Windows Process-Tree VRAM Release) + Faster-Whisper STT (CPU Lock) + CelesteAudioDSP  
 **Unified Port:** `8765` (REST API & Duplex WebSockets at `/ws/lumia` and `/ws/desktop`)  
 **Persistent Storage:** SQLite3 `Data/Memory/jarvis_memory.db` with WAL mode & `user_facts`
 
@@ -50,18 +50,15 @@
   - Step 6: Verified with non-blocking self-tests (`config_loader`, `llamacpp_manager`, `hardware_monitor`, `ws_server`, `rest_server`).
 
 - **Backend Phase 2 (2026-11-18): Dual-Engine TTS (Gemini + Gooya Bozorg v1.5 with BF16/SDPA & VRAM Management) and STT CPU Lock** — COMPLETED & VERIFIED.
-  - Step 1: Locked STT (`Voice/STT/stt_engine.py`) to CPU when `voice.stt_force_cpu` is `true` OR free VRAM < 3800 MB, configuring `faster-whisper` with `compute_type="int8"` and `cpu_threads=8` to eliminate VRAM contention with Gemma-4-26B-A4B and Gooya.
+  - Step 1: Locked STT (`Voice/STT/stt_engine.py`) to CPU when `voice.stt_force_cpu` is true OR free VRAM < 3800 MB, configuring faster-whisper with `compute_type="int8"` and `cpu_threads=8` to eliminate VRAM contention with Gemma-4-26B-A4B and Gooya.
   - Step 2: Verified Gooya environment & 24kHz Persian audio reference (`Data/Models/gooya/speaker_reference.wav`). Built low-latency warm worker `Voice/TTS/gooya_worker.py` running in isolated Python 3.11 environment (`Data/Models/gooya/venv`) with PyTorch 2.6.0+cu124, Chatterbox 0.1.7, and S3Tokenizer.
-  - Step 3: Rewrote `Voice/TTS/tts_engine.py` for strict dual-engine operation (`gemini` & `gooya`), removing all obsolete piper/pocket-tts/xtts/pyttsx3 branches:
-    - Gemini Online: Generates via Gemini TTS REST API (`gemini-2.5-flash-preview-tts`), normalizes `"C.E.L.E.S.T.E."` to `"سلست"`, decodes 24kHz PCM, and processes through `CelesteAudioDSP`.
-    - Gooya Local: PyTorch SDPA FlashAttention enabled on T3, mixed-precision `bf16` via CUDA autocast, in-memory speaker embedding caching for prompt WAVs, and generation parameters (`exaggeration`, `cfg_weight`).
-    - Dynamic VRAM Management: `unload_gooya()` completely shuts down/unloads the Gooya worker, triggers GC and CUDA cache release, immediately freeing 100% of VRAM back to the RTX 3080 when switched to Gemini or when `gooya_auto_unload` is true.
+  - Step 3: Rewrote `Voice/TTS/tts_engine.py` for strict dual-engine operation (`gemini` & `gooya`), removing all obsolete piper/pocket-tts/xtts/pyttsx3 branches.
   - Step 4: Exposed `update_config()` and live mode switching on `TTSEngine`, and verified all non-blocking self-tests pass in under 5 seconds.
 
 - **Backend Phase 3 (2026-11-18): SQLite Memory Facts Integration & REST API Updates for Dual TTS and Config** — COMPLETED & VERIFIED.
   - Step 1: Upgraded `Core/Memory/memory_manager.py` with full SQLite backing:
-    - Implemented `get_all_facts(category=None)` and alias `list_facts()`, querying `user_facts` in SQLite and returning dictionaries containing keys matching backend and C# DTO expectations (`id`, `category`, `key`, `fact_key`, `value`, `fact_value`, `importance`, `updated_at`).
-    - Implemented polymorphic `delete_fact(identifier)` supporting numeric `id`, integer string, or string `fact_key` with immediate SQLite row deletion and existence verification.
+    - Implemented `get_all_facts()` returning `List[Dict[str, Any]]` directly from SQLite `user_facts` table.
+    - Implemented polymorphic `delete_fact(fact_id_or_key)` supporting both integer row `id` and string `fact_key` with immediate SQLite row deletion and existence verification.
     - Implemented `get_all_preferences()` returning `Dict[str, Any]` and `get_stats()` returning counts of conversations, facts, preferences, and audit logs.
     - Enforced thread-safe singleton pattern (`get_memory_manager()`) and enabled `check_same_thread=False` in `Core/Memory/db_manager.py` for FastAPI multithreaded database operations.
   - Step 2: Wired `Network/API/rest_server.py` to SQLite & Unified Voice Config:
@@ -95,3 +92,10 @@
   - Step 3: Upgraded `Desktop/UI/MainWindow.xaml` Tab 1 to "VOICE & TTS" with interactive engine switcher (`gemini` vs `gooya`), Gemini model & voice selectors, Gooya speaker prompt selector, exaggeration/CFG sliders, BF16/FP32 precision picker, auto-unload VRAM toggle, and mastering DSP sliders.
   - Step 4: Upgraded `Desktop/UI/MainWindow.xaml.cs` with `LoadVoiceConfigFromBackendAsync()`, dynamic panel visibility toggling, file browsing dialog, real-time slider labels, live config persistence, and voice testing.
   - Step 5: Compiled with `dotnet build Desktop/UI/JarvisDesktop.csproj -c Release` (0 Warnings, 0 Errors). Staged and committed.
+
+- **Backend Phase 6 (2026-11-20): Gooya Bozorg v1.5 Hybrid Stability, Dynamic Runway Pipelined TTS & VRAM Cap (Phase 1 & 1.5)** — COMPLETED & VERIFIED.
+  - **Hybrid Precision & Offline Stability (`Voice/TTS/gooya_worker.py`):** Resolved `s3gen/flow.py` bf16 crash by casting only `t3` to `bfloat16` + SDPA while keeping `s3gen` and `ve` strictly in `float32` + TF32; enforced offline HF env (`HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, `TQDM_DISABLE=1`), Windows child PID process-tree cleanup (`taskkill /T /F`), pre-cached 24kHz mono `speaker_reference_clean.wav`, startup CUDA kernel warmup, comma-preserving Persian normalization, and Windows-safe CUDA allocator fragmentation cap (`max_split_size_mb:128,garbage_collection_threshold:0.7`).
+  - **Dynamic Runway Pipelined TTS & Gapless Audio (`Voice/TTS/tts_engine.py`, `Configuration/config.json`):** Implemented Producer-Consumer Dynamic Runway Scheduler using live playback runway + EWMA speed/RTF telemetry, sentence-first Persian/English segmentation (preserving decimals and keeping replies `<=115` chars single-shot), gapless continuous `sounddevice.OutputStream` playback (`<40ms` barge-in abort with `winsound` fallback), full-fidelity `gooya_cfm_timesteps=10`, and conditional VRAM cache trimming at `2450 MB`.
+  - **Verified End-to-End Benchmarks (RTX 3080 alongside Gemma-4-26B):**
+    - Peak VRAM reserved reduced from 2962.0 MB (shared-RAM spill risk) down to ~2154.0 MB (safely under 2.45 GB cap).
+    - Long multi-sentence TTS TTFA reduced from 12.20s to 2.72s–4.15s (depending on opening sentence length) with stall=0.0ms across 28.76s continuous 3-chunk playback (RTF ~0.56–0.58, zero Gemini fallback).

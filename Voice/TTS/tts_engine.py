@@ -1,8 +1,9 @@
-# C.E.L.E.S.T.E. Voice - Dual-Engine TTS (Gemini + Gooya Bozorg v1.5)
-# Low-Latency Streaming Architecture:
-#   - Persian/English adaptive 2-tier sentence/clause chunker (TTFA ~1.5-2.5s)
-#   - Producer-Consumer pipelined Gooya synthesis & playback with instant barge-in (stop_speaking)
-#   - Clean Gemini fallback (for chunk 1 or remaining tail), Windows venv process-tree cleanup,
+# C.E.L.E.S.T.E. Voice - Dual-Engine TTS (Gemini + Gooya Bozorg v1.5) [Phase 1.5]
+# Low-Latency Streaming & Prosody-First Architecture:
+#   - Dynamic Runway Scheduler (Just-In-Time chunk sizing from live playback buffer + EWMA RTF)
+#   - Sentence-first Persian/English segmentation (preserves full-sentence cadence & decimals)
+#   - Gapless continuous sounddevice OutputStream playback (<40ms barge-in) with winsound fallback
+#   - Clean Gemini fallback (chunk 1 or remaining tail), Windows venv process-tree cleanup,
 #     offline HF env, startup preload + CUDA warmup, and full turn_id observability
 from __future__ import annotations
 
@@ -21,10 +22,15 @@ import threading
 import time
 import wave
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import requests
+
+try:
+    import sounddevice as _sd
+except Exception:
+    _sd = None
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -49,8 +55,118 @@ _SINGLETON_LOCK = threading.Lock()
 _SINGLETON_INSTANCE: Optional['TTSEngine'] = None
 
 
+class _ContinuousAudioPlayer:
+    """Gapless sounddevice OutputStream player with <40ms barge-in abort."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._stream: Any = None
+        self._sr: int = 0
+        self._aborted: bool = False
+
+    def _ensure_stream(self, sample_rate: int) -> Any:
+        if _sd is None:
+            return None
+        with self._lock:
+            if self._aborted:
+                return None
+            if self._stream is not None and self._sr == sample_rate:
+                return self._stream
+            if self._stream is not None:
+                try:
+                    self._stream.stop()
+                    self._stream.close()
+                except Exception:
+                    pass
+                self._stream = None
+            stream = _sd.OutputStream(samplerate=sample_rate, channels=1, dtype='float32')
+            stream.start()
+            self._stream = stream
+            self._sr = sample_rate
+            return stream
+
+    def write_wakeup_slice(
+        self,
+        sample_rate: int,
+        slice_ms: int = 40,
+        is_cancelled: Optional[Callable[[], bool]] = None,
+        ramp_in: bool = False,
+    ) -> int:
+        if (is_cancelled and is_cancelled()) or self._aborted:
+            return 0
+        stream = self._ensure_stream(sample_rate)
+        if stream is None:
+            raise RuntimeError('sounddevice stream unavailable')
+        n_samples = max(256, int(round(sample_rate * (slice_ms / 1000.0))))
+        sig = TTSEngine._make_wakeup_signal(n_samples, sample_rate=sample_rate, ramp_in=ramp_in)
+        block = np.ascontiguousarray(sig, dtype=np.float32).reshape(-1, 1)
+        try:
+            stream.write(block)
+        except Exception:
+            if not ((is_cancelled and is_cancelled()) or self._aborted):
+                raise
+            return 0
+        return slice_ms
+
+    def play_chunk(self, pcm: np.ndarray, sample_rate: int, is_cancelled: Callable[[], bool]) -> float:
+        if pcm is None or len(pcm) == 0 or is_cancelled():
+            return 0.0
+        t0 = time.perf_counter()
+        stream = self._ensure_stream(sample_rate)
+        if stream is None:
+            raise RuntimeError('sounddevice stream unavailable')
+
+        data = np.clip(pcm, -1.0, 1.0).astype(np.float32, copy=False)
+        step = max(256, int(sample_rate * 0.04))  # 40ms slices for instant barge-in responsiveness
+        n = data.size
+        pos = 0
+        try:
+            while pos < n:
+                if is_cancelled() or self._aborted:
+                    break
+                block = np.ascontiguousarray(data[pos:pos + step], dtype=np.float32).reshape(-1, 1)
+                stream.write(block)
+                pos += step
+        except Exception:
+            if not (is_cancelled() or self._aborted):
+                raise
+        return round((time.perf_counter() - t0) * 1000.0, 1)
+
+    def abort(self) -> None:
+        with self._lock:
+            self._aborted = True
+            stream = self._stream
+            self._stream = None
+        if stream is not None:
+            try:
+                stream.abort()
+            except Exception:
+                pass
+            try:
+                stream.close()
+            except Exception:
+                pass
+
+    def close(self, aborted: bool = False) -> None:
+        with self._lock:
+            stream = self._stream
+            self._stream = None
+        if stream is not None:
+            try:
+                if aborted or self._aborted:
+                    stream.abort()
+                else:
+                    stream.stop()
+            except Exception:
+                pass
+            try:
+                stream.close()
+            except Exception:
+                pass
+
+
 class TTSEngine:
-    """C.E.L.E.S.T.E. Dual-Engine Speech Synthesis (Gemini REST + Pipelined Gooya Bozorg v1.5)."""
+    """C.E.L.E.S.T.E. Dual-Engine Speech Synthesis (Gemini REST + Dynamic Pipelined Gooya Bozorg v1.5)."""
 
     DEFAULT_SAMPLE_RATE = 24000
     SPEAK_QUEUE_MAX = 15
@@ -72,6 +188,7 @@ class TTSEngine:
         self._preload_lock = threading.Lock()
         self._speaking = False
         self._speech_generation_id = 0
+        self._active_player: Optional[_ContinuousAudioPlayer] = None
         self._queue = []
         self._dsp = None
         self._gooya_proc: Optional[subprocess.Popen] = None
@@ -80,6 +197,9 @@ class TTSEngine:
         self._gooya_loaded: bool = False
         self._preloading: bool = False
         self._last_synth_meta: Dict[str, Any] = {}
+        # Adaptive live telemetry estimates for Dynamic Runway Scheduler (calibrated for RTX 3080 Gooya)
+        self._ewma_sec_per_char: float = 0.074
+        self._ewma_rtf: float = 0.60
         self._config = self._load_config()
         self._engine_mode = self._config.get('engine_mode', 'gemini').lower()
         if self._engine_mode not in ('gemini', 'gooya'):
@@ -90,7 +210,7 @@ class TTSEngine:
                 _SINGLETON_INSTANCE = self
 
         atexit.register(self._atexit_cleanup)
-        logger.info('TTSEngine initialized with mode: %s', self._engine_mode)
+        logger.info('TTSEngine initialized with mode: %s (continuous_audio=%s)', self._engine_mode, _sd is not None)
 
         if (
             auto_preload
@@ -161,7 +281,9 @@ class TTSEngine:
                 'gooya_precision': self._config.get('gooya_precision', 'bf16'),
                 'gooya_auto_unload': self._config.get('gooya_auto_unload', False),
                 'gooya_chunking_enabled': bool(self._config.get('gooya_chunking_enabled', True)),
-                'gooya_cfm_timesteps': int(self._config.get('gooya_cfm_timesteps', 8)),
+                'gooya_cfm_timesteps': int(self._config.get('gooya_cfm_timesteps', 10)),
+                'continuous_audio_available': _sd is not None,
+                'audio_preroll_ms': self._get_audio_preroll_ms(self._config),
             }
 
     def set_engine_mode(self, new_mode: str) -> None:
@@ -240,17 +362,16 @@ class TTSEngine:
             explicit_tone = tone_match.group(1).strip()
             text = text[:tone_match.start()] + text[tone_match.end():]
         text = re.sub(r'[*#_~>|•]', ' ', text)
-        # Preserve paragraph/line breaks as sentence separators while normalizing horizontal spaces
         text = re.sub(r'[ \t\r]+', ' ', text)
         text = re.sub(r'\n\s*', '\n', text).strip()
         return explicit_tone or 'صمیمی و طبیعی', text
 
     # ------------------------------------------------------------------
-    # Adaptive 2-Tier Persian/English Chunker (Low TTFA + Natural Prosody)
+    # Sentence-First Persian/English Segmentation & Dynamic Runway Planner
     # ------------------------------------------------------------------
     @staticmethod
     def _split_atomic_sentences(text: str) -> List[str]:
-        """Split text into sentences without breaking decimals (3.14, ۴۴.۵) or abbreviations."""
+        """Split text into natural sentences without breaking decimals (3.14, ۴۴.۵)."""
         sentences: List[str] = []
         digit_chars = set('0123456789۰۱۲۳۴۵۶۷۸۹')
         end_marks = set('.!?؟؛…')
@@ -265,15 +386,12 @@ class TTSEngine:
             while i < n:
                 ch = line[i]
                 if ch in end_marks:
-                    # Protect decimal numbers (e.g., 3.14 or ۴۴.۵)
                     if ch == '.' and i > 0 and (i + 1) < n and line[i - 1] in digit_chars and line[i + 1] in digit_chars:
                         i += 1
                         continue
-                    # Consume consecutive punctuation (e.g., ... or ؟!)
                     j = i
                     while (j + 1) < n and line[j + 1] in end_marks:
                         j += 1
-                    # Boundary if followed by whitespace or end-of-line
                     if (j + 1) == n or line[j + 1].isspace():
                         seg = line[start:j + 1].strip()
                         if seg:
@@ -292,154 +410,178 @@ class TTSEngine:
 
         return sentences
 
-    @staticmethod
-    def _split_long_segment(seg: str, min_chars: int, max_chars: int) -> List[str]:
-        """Split a long sentence cleanly at clause punctuation, Persian/English conjunctions, or spaces."""
-        parts: List[str] = []
+    @classmethod
+    def _pop_prefix_from_segment(cls, seg: str, min_chars: int, max_chars: int) -> Tuple[str, str]:
+        """Split off a clean clause prefix <= max_chars from an oversized sentence, preserving the rest intact."""
         rem = seg.strip()
-        clause_marks = ('،', ',', ':', '—', '–', ';')
+        if len(rem) <= max_chars:
+            return rem, ''
+
+        clause_marks = ('،', ',', ':', '—', '–', ';', '؛')
         conjunctions = (' و ', ' که ', ' اما ', ' ولی ', ' تا ', ' چون ', ' یا ', ' زیرا ', ' and ', ' but ', ' because ')
+        eff_min = max(12, min(min_chars, max_chars - 10))
+        split_pos = -1
 
-        while len(rem) > max_chars:
-            split_pos = -1
+        # 1. Clause punctuation inside [eff_min, max_chars] (rightmost)
+        for idx in range(min(max_chars, len(rem) - 1), eff_min - 1, -1):
+            if rem[idx] in clause_marks:
+                split_pos = idx + 1
+                break
 
-            # 1. Clause punctuation within [min_chars, max_chars] (prefer rightmost)
-            for idx in range(min(max_chars, len(rem) - 1), min_chars - 1, -1):
+        # 1b. Slightly past max_chars (+16) if a natural clause mark sits right there
+        if split_pos == -1:
+            upper = min(len(rem) - 1, max_chars + 16)
+            for idx in range(max_chars + 1, upper + 1):
                 if rem[idx] in clause_marks:
                     split_pos = idx + 1
                     break
 
-            # 1b. Slightly past max_chars (+18) if a natural clause mark sits right there
-            if split_pos == -1:
-                upper = min(len(rem) - 1, max_chars + 18)
-                for idx in range(max_chars + 1, upper + 1):
-                    if rem[idx] in clause_marks:
-                        split_pos = idx + 1
-                        break
+        # 2. Natural conjunction boundary
+        if split_pos == -1:
+            window = rem[:max_chars + 1]
+            best_conj = -1
+            for conj in conjunctions:
+                pos = window.rfind(conj, eff_min)
+                if pos > best_conj:
+                    best_conj = pos
+            if best_conj >= eff_min:
+                split_pos = best_conj
 
-            # 2. Natural conjunction boundary within [min_chars, max_chars]
-            if split_pos == -1:
-                window = rem[:max_chars + 1]
-                best_conj = -1
-                for conj in conjunctions:
-                    pos = window.rfind(conj, min_chars)
-                    if pos > best_conj:
-                        best_conj = pos
-                if best_conj >= min_chars:
-                    split_pos = best_conj
+        # 3. Nearest whitespace
+        if split_pos == -1:
+            sp = rem.rfind(' ', eff_min, max_chars + 1)
+            if sp != -1:
+                split_pos = sp
+            else:
+                sp_after = rem.find(' ', max_chars)
+                split_pos = sp_after if sp_after != -1 else max_chars
 
-            # 3. Nearest whitespace <= max_chars
-            if split_pos == -1:
-                sp = rem.rfind(' ', min_chars, max_chars + 1)
-                if sp != -1:
-                    split_pos = sp
+        left = rem[:split_pos].strip()
+        right = rem[split_pos:].strip()
+        if not left:
+            cut = min(len(rem), max(1, max_chars))
+            return rem[:cut].strip(), rem[cut:].strip()
+
+        # Prevent tiny orphan tail (<24 chars)
+        if right and len(right) < 24 and len(rem) <= max_chars + 24:
+            return rem, ''
+
+        return left, right
+
+    @classmethod
+    def _pop_next_dynamic_chunk(
+        cls,
+        remaining: List[str],
+        target_max: int,
+        target_min: int,
+        vram_max: int,
+        is_first: bool,
+    ) -> Tuple[str, bool]:
+        """Pop the next prosody-optimal chunk from remaining sentences given live target_max budget."""
+        if not remaining:
+            return '', False
+
+        sent = remaining.pop(0).strip()
+        if not sent:
+            return cls._pop_next_dynamic_chunk(remaining, target_max, target_min, vram_max, is_first)
+
+        # Sentence-integrity grace: prefer keeping a full sentence intact if only slightly over budget
+        grace_cap = min(vram_max, target_max + 15)
+        if len(sent) > grace_cap:
+            left, right = cls._pop_prefix_from_segment(sent, target_min, min(target_max, vram_max))
+            if right:
+                remaining.insert(0, right)
+                return left, True
+            return left, False
+
+        chunk = sent
+        if is_first:
+            # Combine tiny opening sentences (< target_min, e.g. 42 chars) to build healthy runway & cadence
+            while remaining and len(chunk) < target_min:
+                nxt = remaining[0]
+                if len(chunk) + 1 + len(nxt) <= min(target_max, vram_max):
+                    chunk = f'{chunk} {remaining.pop(0)}'
                 else:
-                    sp_after = rem.find(' ', max_chars)
-                    split_pos = sp_after if sp_after != -1 else max_chars
+                    break
+        else:
+            pack_cap = min(target_max, vram_max)
+            while remaining:
+                nxt = remaining[0]
+                if len(chunk) + 1 + len(nxt) <= pack_cap:
+                    chunk = f'{chunk} {remaining.pop(0)}'
+                else:
+                    break
 
-            left = rem[:split_pos].strip()
-            right = rem[split_pos:].strip()
-            if not left:
-                break
-            parts.append(left)
-            rem = right
-            if not rem:
-                break
+        # Merge tiny final tail (<28 chars) so Gooya never speaks an isolated 1-2 word fragment
+        if len(remaining) == 1 and len(remaining[0]) < 28:
+            tail_cap = min(vram_max + 20, target_max + 25)
+            if len(chunk) + 1 + len(remaining[0]) <= tail_cap:
+                chunk = f'{chunk} {remaining.pop(0)}'
 
-        if rem:
-            parts.append(rem)
-        return parts
+        return chunk, False
 
     @classmethod
     def split_text_for_streaming_tts(
         cls,
         text: str,
-        first_max_chars: int = 75,
-        first_min_chars: int = 22,
-        chunk_max_chars: int = 140,
+        first_max_chars: int = 105,
+        first_min_chars: int = 42,
+        chunk_max_chars: int = 150,
         chunk_min_chars: int = 45,
+        single_shot_max_chars: int = 115,
     ) -> List[str]:
-        """Adaptive 2-tier splitter: short Chunk 1 for ~1.5-2.5s TTFA, longer subsequent chunks for prosody & VRAM safety."""
+        """Static sentence-first splitter (used by direct synthesize() calls & unit tests)."""
         raw = (text or '').strip()
         if not raw:
             return []
 
         flat = re.sub(r'\s+', ' ', raw).strip()
-        if len(flat) <= first_max_chars + 15:
+        if len(flat) <= single_shot_max_chars:
             return [flat]
 
-        sentences = cls._split_atomic_sentences(raw)
-        if not sentences:
+        rem = cls._split_atomic_sentences(raw)
+        if not rem:
             return [flat]
 
         chunks: List[str] = []
-        buf = ''
-
-        def _flush_buf() -> None:
-            nonlocal buf
-            if buf:
-                chunks.append(buf)
-                buf = ''
-
-        for sent in sentences:
+        while rem:
             is_first = (len(chunks) == 0)
-            cur_min = first_min_chars if is_first else chunk_min_chars
-            cur_max = first_max_chars if is_first else chunk_max_chars
+            ch, _ = cls._pop_next_dynamic_chunk(
+                rem,
+                target_max=first_max_chars if is_first else chunk_max_chars,
+                target_min=first_min_chars if is_first else chunk_min_chars,
+                vram_max=chunk_max_chars,
+                is_first=is_first,
+            )
+            if ch:
+                chunks.append(ch)
+        return chunks
 
-            if not buf:
-                if len(sent) <= cur_max:
-                    buf = sent
-                    # Emit Chunk 1 as soon as a complete natural sentence >= first_min_chars is ready
-                    if is_first and len(buf) >= first_min_chars:
-                        _flush_buf()
-                else:
-                    pieces = cls._split_long_segment(sent, cur_min, cur_max)
-                    if is_first and pieces:
-                        chunks.append(pieces[0])
-                        # Re-pack remaining pieces using Tier-2 budget
-                        for p in pieces[1:]:
-                            if not buf:
-                                if len(p) <= chunk_max_chars:
-                                    buf = p
-                                else:
-                                    sub = cls._split_long_segment(p, chunk_min_chars, chunk_max_chars)
-                                    chunks.extend(sub[:-1])
-                                    buf = sub[-1] if sub else ''
-                            elif len(buf) + 1 + len(p) <= chunk_max_chars:
-                                buf = f'{buf} {p}'
-                            else:
-                                _flush_buf()
-                                buf = p
-                    else:
-                        chunks.extend(pieces[:-1])
-                        buf = pieces[-1] if pieces else ''
-            else:
-                if len(buf) + 1 + len(sent) <= cur_max:
-                    buf = f'{buf} {sent}'
-                    if is_first and len(buf) >= first_min_chars:
-                        _flush_buf()
-                else:
-                    _flush_buf()
-                    # Now we are strictly in Tier-2 budget
-                    if len(sent) <= chunk_max_chars:
-                        buf = sent
-                    else:
-                        pieces = cls._split_long_segment(sent, chunk_min_chars, chunk_max_chars)
-                        chunks.extend(pieces[:-1])
-                        buf = pieces[-1] if pieces else ''
+    def _update_ewma_metrics(self, chars: int, audio_s: float, rtf: float) -> None:
+        if chars <= 0 or audio_s <= 0.2 or rtf <= 0.05:
+            return
+        obs_spc = max(0.035, min(0.14, audio_s / float(chars)))
+        obs_rtf = max(0.25, min(1.20, float(rtf)))
+        alpha = 0.35
+        with self._lock:
+            self._ewma_sec_per_char = (1.0 - alpha) * self._ewma_sec_per_char + alpha * obs_spc
+            self._ewma_rtf = (1.0 - alpha) * self._ewma_rtf + alpha * obs_rtf
 
-        _flush_buf()
+    def _compute_dynamic_char_budget(self, available_runway_s: float, cfg: dict) -> int:
+        """Compute max chars for next chunk so synthesis finishes strictly before playback runway ends."""
+        vram_max = int(cfg.get('gooya_chunk_max_chars', 150))
+        min_floor = int(cfg.get('gooya_chunk_min_chars', 45))
+        safety_s = float(cfg.get('gooya_runway_safety_s', 0.40))
+        fixed_overhead_s = 0.30
 
-        # Merge tiny trailing fragments (<22 chars) so Gooya never receives an isolated 1-2 word tail
-        while len(chunks) >= 2 and len(chunks[-1]) < 22:
-            merge_limit = (first_max_chars + 25) if len(chunks) == 2 else (chunk_max_chars + 35)
-            if len(chunks[-2]) + 1 + len(chunks[-1]) <= merge_limit:
-                chunks[-2] = f'{chunks[-2]} {chunks[-1]}'
-                chunks.pop()
-            else:
-                break
+        with self._lock:
+            spc = self._ewma_sec_per_char
+            rtf = self._ewma_rtf
 
-        return [c for c in chunks if c.strip()]
+        synth_rate_per_char = max(0.025, spc * max(rtf, 0.50))
+        synth_budget_s = max(1.6, available_runway_s - safety_s - fixed_overhead_s)
+        est_chars = int(synth_budget_s / synth_rate_per_char)
+        return max(min_floor, min(vram_max, est_chars))
 
     # ------------------------------------------------------------------
     # Engine A: Gemini Online Engine
@@ -557,7 +699,6 @@ class TTSEngine:
                 pass
 
     def _drain_worker_stdout(self, proc: subprocess.Popen, resp_queue: queue.Queue) -> None:
-        """Continuously pump worker stdout so protocol responses are non-blocking and stray prints are logged."""
         stdout_logger = logging.getLogger('gooya_worker.stdout')
         try:
             if proc.stdout is None:
@@ -761,12 +902,18 @@ class TTSEngine:
         defer_auto_unload: bool = False,
         chunk_index: int = 1,
         total_chunks: int = 1,
+        is_continuation: bool = False,
     ) -> Tuple[Optional[np.ndarray], int]:
         t0 = time.perf_counter()
         try:
             proc = self._ensure_gooya_worker()
             ref_path = self._resolve_gooya_ref_path(cfg)
-            chunk_info = f'{chunk_index}/{total_chunks}' if total_chunks > 1 else ''
+            if total_chunks > 1:
+                chunk_info = f'{chunk_index}/{total_chunks}'
+            elif chunk_index > 1:
+                chunk_info = f'{chunk_index}'
+            else:
+                chunk_info = ''
 
             req = {
                 'command': 'synthesize',
@@ -777,9 +924,10 @@ class TTSEngine:
                 'precision': cfg.get('gooya_precision', 'bf16'),
                 'temperature': float(cfg.get('gooya_temperature', 0.75)),
                 'repetition_penalty': float(cfg.get('gooya_repetition_penalty', 1.25)),
-                'cfm_timesteps': int(cfg.get('gooya_cfm_timesteps', 8)),
+                'cfm_timesteps': int(cfg.get('gooya_cfm_timesteps', 10)),
                 'vram_trim_threshold_mb': float(cfg.get('gooya_vram_trim_mb', 2450.0)),
                 'trim_silence': bool(cfg.get('gooya_trim_silence', True)),
+                'is_continuation': bool(is_continuation),
                 'chunk_info': chunk_info,
                 'turn_id': get_turn_id(),
             }
@@ -801,12 +949,16 @@ class TTSEngine:
                 pcm = self._apply_dsp(pcm, sr)
                 dsp_ms = round((time.perf_counter() - t_dsp) * 1000.0, 1)
 
+                audio_s = float(resp.get('audio_duration_s', 0.0) or 0.0)
+                rtf_val = float(resp.get('rtf', 0.0) or 0.0)
+                self._update_ewma_metrics(len(text), audio_s, rtf_val)
+
                 self._last_synth_meta.update({
                     'engine_used': 'gooya',
                     'synth_ms': synth_ms,
                     'dsp_ms': dsp_ms,
-                    'audio_duration_s': float(resp.get('audio_duration_s', 0.0) or 0.0),
-                    'rtf': float(resp.get('rtf', 0.0) or 0.0),
+                    'audio_duration_s': audio_s,
+                    'rtf': rtf_val,
                     'vram_allocated_mb': resp.get('vram_allocated_mb', '?'),
                     'vram_reserved_mb': resp.get('vram_reserved_mb', '?'),
                 })
@@ -890,6 +1042,37 @@ class TTSEngine:
     # ------------------------------------------------------------------
     # Audio DSP & Playback
     # ------------------------------------------------------------------
+    @staticmethod
+    def _get_audio_preroll_ms(cfg: dict) -> int:
+        try:
+            val = int(round(float(cfg.get('audio_preroll_ms', 450))))
+        except (TypeError, ValueError):
+            val = 450
+        return max(0, min(1500, val))
+
+    @staticmethod
+    def _make_wakeup_signal(num_samples: int, sample_rate: int = 24000, ramp_in: bool = True) -> np.ndarray:
+        """Ultra-quiet (-72 dBFS) non-zero dither that wakes HDMI/Bluetooth/DAC mute relays without audible noise."""
+        if num_samples <= 0:
+            return np.zeros(0, dtype=np.float32)
+        rng = np.random.default_rng()
+        sig = rng.uniform(-2.5e-4, 2.5e-4, size=num_samples).astype(np.float32)
+        if ramp_in:
+            fade = min(num_samples, max(1, int(sample_rate * 0.010)))
+            if fade > 1:
+                sig[:fade] *= np.linspace(0.0, 1.0, fade, dtype=np.float32)
+        return sig
+
+    @classmethod
+    def _prepend_preroll(cls, pcm: np.ndarray, sample_rate: int, preroll_ms: int) -> np.ndarray:
+        if pcm is None or len(pcm) == 0 or preroll_ms <= 0 or sample_rate <= 0:
+            return pcm
+        pad_samples = int(round(sample_rate * (preroll_ms / 1000.0)))
+        if pad_samples <= 0:
+            return pcm
+        wakeup = cls._make_wakeup_signal(pad_samples, sample_rate=sample_rate, ramp_in=True)
+        return np.concatenate((wakeup, np.asarray(pcm, dtype=np.float32)))
+
     def _apply_dsp(self, pcm: np.ndarray, sample_rate: int) -> np.ndarray:
         try:
             from Voice.AudioDSP.jarvis_dsp import CelesteAudioDSP
@@ -937,10 +1120,11 @@ class TTSEngine:
             return [re.sub(r'\s+', ' ', clean_text).strip()]
         return self.split_text_for_streaming_tts(
             clean_text,
-            first_max_chars=int(cfg.get('gooya_first_chunk_max_chars', 75)),
-            first_min_chars=int(cfg.get('gooya_first_chunk_min_chars', 22)),
-            chunk_max_chars=int(cfg.get('gooya_chunk_max_chars', 140)),
+            first_max_chars=int(cfg.get('gooya_first_sentence_max_chars', 105)),
+            first_min_chars=int(cfg.get('gooya_first_chunk_min_chars', 42)),
+            chunk_max_chars=int(cfg.get('gooya_chunk_max_chars', 150)),
             chunk_min_chars=int(cfg.get('gooya_chunk_min_chars', 45)),
+            single_shot_max_chars=int(cfg.get('gooya_single_shot_max_chars', 115)),
         )
 
     def synthesize(self, text: str, tone: Optional[str] = None, turn_id: Optional[str] = None) -> Tuple[Optional[np.ndarray], int]:
@@ -986,7 +1170,6 @@ class TTSEngine:
                     logger.warning('TTS FALLBACK triggered: gooya -> gemini (reason=%s)', reason)
                     return self._synthesize_gemini(chunks[0], used_tone, cfg)
 
-                # Chunked non-streaming synthesis (protects VRAM for direct synthesize() callers)
                 pcm_parts: List[np.ndarray] = []
                 out_sr = self.DEFAULT_SAMPLE_RATE
                 total_synth_ms = 0.0
@@ -1053,19 +1236,32 @@ class TTSEngine:
             ).start()
             return True
 
-    def _speak_gooya_pipelined(
+    def _speak_gooya_dynamic_pipelined(
         self,
-        chunks: List[str],
+        sentences: List[str],
         clean_text: str,
         tone: str,
         cfg: dict,
         gen_id: int,
         t_total: float,
     ) -> bool:
-        """Producer-Consumer pipelined Gooya playback: Chunk 1 plays immediately while subsequent chunks synthesize."""
+        """Dynamic Runway Producer-Consumer Gooya pipeline: zero inter-chunk stalls + full-sentence prosody."""
         caller_tid = get_turn_id()
         chunk_q: queue.Queue = queue.Queue(maxsize=4)
-        total_chunks = len(chunks)
+        remaining = list(sentences)
+
+        first_max = int(cfg.get('gooya_first_sentence_max_chars', 105))
+        first_min = int(cfg.get('gooya_first_chunk_min_chars', 42))
+        vram_max = int(cfg.get('gooya_chunk_max_chars', 150))
+        chunk_min = int(cfg.get('gooya_chunk_min_chars', 45))
+
+        runway_lock = threading.Lock()
+        runway_state: Dict[str, Any] = {
+            'total_produced_s': 0.0,
+            'play_start_t': None,
+            'planned_sizes': [],
+            'total_chunks': 0,
+        }
 
         def _is_cancelled() -> bool:
             return gen_id != self._speech_generation_id
@@ -1079,33 +1275,80 @@ class TTSEngine:
                     continue
             return False
 
+        def _get_available_runway_s() -> float:
+            with runway_lock:
+                prod_s = float(runway_state['total_produced_s'])
+                play_t = runway_state['play_start_t']
+            if play_t is None:
+                return prod_s
+            return max(0.0, prod_s - (time.perf_counter() - play_t))
+
         def _producer() -> None:
             with turn_context(caller_tid if caller_tid != '-' else None, prefix='TTS'):
+                idx = 0
                 try:
-                    for idx, ch_text in enumerate(chunks, 1):
+                    while remaining:
                         if _is_cancelled():
                             return
+                        idx += 1
+                        is_first = (idx == 1)
+                        if is_first:
+                            target_max = first_max
+                            target_min = first_min
+                            runway_s = 0.0
+                        else:
+                            runway_s = _get_available_runway_s()
+                            target_max = self._compute_dynamic_char_budget(runway_s, cfg)
+                            target_min = chunk_min
+
+                        ch_text, is_cont = self._pop_next_dynamic_chunk(
+                            remaining,
+                            target_max=target_max,
+                            target_min=target_min,
+                            vram_max=vram_max,
+                            is_first=is_first,
+                        )
+                        if not ch_text:
+                            break
+
+                        with runway_lock:
+                            runway_state['planned_sizes'].append(len(ch_text))
+                            runway_state['total_chunks'] = idx
+
+                        if idx > 1:
+                            logger.debug(
+                                'Dynamic Runway Plan | chunk=%d runway=%.2fs -> budget=%d chars, picked=%d chars (cont=%s, rem_sents=%d)',
+                                idx, runway_s, target_max, len(ch_text), is_cont, len(remaining),
+                            )
+
                         pcm, sr = self._synthesize_gooya(
                             ch_text,
                             cfg,
                             defer_auto_unload=True,
                             chunk_index=idx,
-                            total_chunks=total_chunks,
+                            total_chunks=idx if not remaining else 0,
+                            is_continuation=is_cont,
                         )
                         if _is_cancelled():
                             return
+
                         if pcm is not None and len(pcm) > 0:
                             meta_snap = dict(self._last_synth_meta)
+                            dur_s = float(meta_snap.get('audio_duration_s', 0.0) or (len(pcm) / float(sr)))
+                            with runway_lock:
+                                runway_state['total_produced_s'] += dur_s
                             if not _put_cancellable(('audio', idx, pcm, sr, meta_snap)):
                                 return
                         else:
                             reason = str(self._last_synth_meta.get('gooya_error', 'gooya_unavailable'))
                             logger.warning(
-                                'TTS FALLBACK triggered (chunk %d/%d): gooya -> gemini (reason=%s)',
-                                idx, total_chunks, reason,
+                                'TTS FALLBACK triggered (chunk %d): gooya -> gemini (reason=%s)',
+                                idx, reason,
                             )
-                            remaining_text = ' '.join(chunks[idx - 1:])
-                            fb_pcm, fb_sr = self._synthesize_gemini(remaining_text, tone, cfg)
+                            tail_parts = [ch_text] + remaining
+                            remaining.clear()
+                            fb_text = ' '.join(tail_parts)
+                            fb_pcm, fb_sr = self._synthesize_gemini(fb_text, tone, cfg)
                             if _is_cancelled():
                                 return
                             meta_snap = dict(self._last_synth_meta)
@@ -1117,7 +1360,7 @@ class TTSEngine:
                                 _put_cancellable(('error', idx, None, self.DEFAULT_SAMPLE_RATE, meta_snap))
                             return
                 except Exception as exc:
-                    logger.exception('Gooya chunk producer error: %s', exc)
+                    logger.exception('Gooya dynamic chunk producer error: %s', exc)
                     _put_cancellable(('error', 0, None, self.DEFAULT_SAMPLE_RATE, {'gooya_error': str(exc)}))
                 finally:
                     if cfg.get('gooya_auto_unload', False):
@@ -1128,9 +1371,18 @@ class TTSEngine:
                     if not _is_cancelled():
                         _put_cancellable(('done', 0, None, self.DEFAULT_SAMPLE_RATE, {}))
 
+        # Use continuous sounddevice OutputStream unless disabled or mocked in unit tests
+        playback_mocked = '_playback_audio' in self.__dict__
+        use_continuous = bool(cfg.get('gooya_use_continuous_audio', True)) and (_sd is not None) and (not playback_mocked)
+        player: Optional[_ContinuousAudioPlayer] = _ContinuousAudioPlayer() if use_continuous else None
+        if player is not None:
+            with self._lock:
+                self._active_player = player
+
+        preroll_ms = self._get_audio_preroll_ms(cfg)
         logger.info(
-            'Gooya Pipelined TTS start | chars=%d chunks=%d sizes=%s',
-            len(clean_text), total_chunks, [len(c) for c in chunks],
+            'Gooya Dynamic Pipelined TTS start | chars=%d sentences=%d audio_backend=%s preroll=%dms',
+            len(clean_text), len(sentences), 'sounddevice' if use_continuous else 'winsound', preroll_ms,
         )
         prod_thread = threading.Thread(target=_producer, daemon=True, name='GooyaChunkProducer')
         prod_thread.start()
@@ -1141,62 +1393,137 @@ class TTSEngine:
         total_dsp_ms = 0.0
         total_play_ms = 0.0
         total_audio_s = 0.0
+        total_stall_ms = 0.0
         used_engine = 'gooya'
         fallback_triggered = False
         fallback_reason = ''
         interrupted = False
+        last_chunk_end_t: Optional[float] = None
+        prime_sr = int(cfg.get('sample_rate', self.DEFAULT_SAMPLE_RATE) or self.DEFAULT_SAMPLE_RATE)
+        prime_start_t: Optional[float] = None
+        primed_ms = 0
+        extra_preroll_ms = preroll_ms
+        first_prime_slice = True
 
-        while True:
-            if _is_cancelled():
-                interrupted = True
-                break
-            try:
-                kind, idx, pcm, sr, meta = chunk_q.get(timeout=0.05)
-            except queue.Empty:
-                if not prod_thread.is_alive() and chunk_q.empty():
+        try:
+            while True:
+                if _is_cancelled():
+                    interrupted = True
                     break
-                continue
+                if chunks_played == 0 and player is not None:
+                    try:
+                        kind, idx, pcm, sr, meta = chunk_q.get_nowait()
+                    except queue.Empty:
+                        if not prod_thread.is_alive() and chunk_q.empty():
+                            break
+                        try:
+                            if prime_start_t is None:
+                                prime_start_t = time.perf_counter()
+                            wrote_ms = player.write_wakeup_slice(
+                                prime_sr,
+                                slice_ms=40,
+                                is_cancelled=_is_cancelled,
+                                ramp_in=first_prime_slice,
+                            )
+                            first_prime_slice = False
+                            if wrote_ms > 0:
+                                primed_ms += wrote_ms
+                        except Exception as warm_exc:
+                            logger.warning('Continuous sounddevice pre-warm failed (%s); falling back to winsound', warm_exc)
+                            player.close(aborted=True)
+                            player = None
+                            prime_start_t = None
+                            primed_ms = 0
+                            with self._lock:
+                                self._active_player = None
+                        continue
+                else:
+                    try:
+                        kind, idx, pcm, sr, meta = chunk_q.get(timeout=0.05)
+                    except queue.Empty:
+                        if not prod_thread.is_alive() and chunk_q.empty():
+                            break
+                        continue
 
-            if kind == 'done':
-                break
-            if kind == 'error':
-                fallback_triggered = bool(meta.get('fallback_triggered', fallback_triggered))
-                fallback_reason = str(meta.get('fallback_reason') or meta.get('gooya_error') or 'unknown')
-                break
+                if kind == 'done':
+                    break
+                if kind == 'error':
+                    fallback_triggered = bool(meta.get('fallback_triggered', fallback_triggered))
+                    fallback_reason = str(meta.get('fallback_reason') or meta.get('gooya_error') or 'unknown')
+                    break
+                if _is_cancelled():
+                    interrupted = True
+                    break
 
-            if _is_cancelled():
-                interrupted = True
-                break
+                if kind == 'fallback_audio':
+                    used_engine = 'gemini' if chunks_played == 0 else 'gooya+gemini'
+                    fallback_triggered = True
+                    fallback_reason = str(meta.get('fallback_reason', ''))
 
-            if kind == 'fallback_audio':
-                used_engine = 'gemini' if chunks_played == 0 else 'gooya+gemini'
-                fallback_triggered = True
-                fallback_reason = str(meta.get('fallback_reason', ''))
+                ch_synth = float(meta.get('synth_ms', 0.0))
+                ch_dsp = float(meta.get('dsp_ms', 0.0))
+                ch_audio = float(meta.get('audio_duration_s', 0.0))
+                total_synth_ms += ch_synth
+                total_dsp_ms += ch_dsp
+                total_audio_s += ch_audio
 
-            ch_synth = float(meta.get('synth_ms', 0.0))
-            ch_dsp = float(meta.get('dsp_ms', 0.0))
-            ch_audio = float(meta.get('audio_duration_s', 0.0))
-            total_synth_ms += ch_synth
-            total_dsp_ms += ch_dsp
-            total_audio_s += ch_audio
+                now_t = time.perf_counter()
+                pcm_to_play = pcm
+                if chunks_played == 0:
+                    ttfa_ms = round((now_t - t_total) * 1000.0, 1)
+                    if player is not None and prime_start_t is not None and primed_ms > 0 and sr == prime_sr:
+                        effective_primed_ms = int(round((now_t - prime_start_t) * 1000.0))
+                    else:
+                        effective_primed_ms = 0
+                    extra_preroll_ms = max(0, preroll_ms - effective_primed_ms)
+                    if extra_preroll_ms > 0:
+                        pcm_to_play = self._prepend_preroll(pcm, sr, extra_preroll_ms)
+                    with runway_lock:
+                        runway_state['play_start_t'] = now_t
+                        if extra_preroll_ms > 0:
+                            runway_state['total_produced_s'] += (extra_preroll_ms / 1000.0)
+                    primed_ms = effective_primed_ms
+                    logger.info(
+                        'Gooya Pipelined TTFA | chunk=1 | ttfa=%.1fms primed=%dms extra_preroll=%dms (chunk1_synth=%.1fms audio=%.2fs)',
+                        ttfa_ms, primed_ms, extra_preroll_ms, ch_synth, ch_audio,
+                    )
+                elif last_chunk_end_t is not None:
+                    gap_ms = (now_t - last_chunk_end_t) * 1000.0
+                    if gap_ms > 25.0:
+                        total_stall_ms += gap_ms
 
-            if chunks_played == 0:
-                ttfa_ms = round((time.perf_counter() - t_total) * 1000.0, 1)
-                logger.info(
-                    'Gooya Pipelined TTFA | chunk=1/%d | ttfa=%.1fms (chunk1_synth=%.1fms audio=%.2fs)',
-                    total_chunks, ttfa_ms, ch_synth, ch_audio,
-                )
+                if player is not None:
+                    try:
+                        play_ms = player.play_chunk(pcm_to_play, sample_rate=sr, is_cancelled=_is_cancelled)
+                    except Exception as sd_exc:
+                        logger.warning('Continuous sounddevice playback failed (%s); falling back to winsound', sd_exc)
+                        player.close(aborted=True)
+                        player = None
+                        with self._lock:
+                            self._active_player = None
+                        play_ms = self._playback_audio(pcm_to_play, sample_rate=sr, blocking=True)
+                else:
+                    play_ms = self._playback_audio(pcm_to_play, sample_rate=sr, blocking=True)
 
-            play_ms = self._playback_audio(pcm, sample_rate=sr, blocking=True)
-            total_play_ms += play_ms
-            chunks_played += 1
+                last_chunk_end_t = time.perf_counter()
+                total_play_ms += play_ms
+                chunks_played += 1
 
-            if _is_cancelled():
-                interrupted = True
-                break
+                if _is_cancelled():
+                    interrupted = True
+                    break
+        finally:
+            if player is not None:
+                player.close(aborted=interrupted)
+                with self._lock:
+                    if self._active_player is player:
+                        self._active_player = None
 
         prod_thread.join(timeout=0.5)
         total_ms = round((time.perf_counter() - t_total) * 1000.0, 1)
+        with runway_lock:
+            sizes = list(runway_state['planned_sizes'])
+            total_chunks = max(chunks_played, int(runway_state['total_chunks']))
 
         if interrupted:
             logger.info(
@@ -1207,13 +1534,17 @@ class TTSEngine:
 
         if chunks_played > 0:
             logger.info(
-                'TTS Turn Complete | req=gooya used=%s fallback=%s%s | chunks=%d/%d | ttfa=%.1fms | chars=%d audio=%.2fs | synth=%.1fms dsp=%.1fms play=%.1fms total=%.1fms',
+                'TTS Turn Complete | req=gooya used=%s fallback=%s%s | chunks=%d/%d sizes=%s | ttfa=%.1fms primed=%dms preroll=%dms stall=%.1fms | chars=%d audio=%.2fs | synth=%.1fms dsp=%.1fms play=%.1fms total=%.1fms',
                 used_engine,
                 fallback_triggered,
                 f' ({fallback_reason})' if fallback_triggered else '',
                 chunks_played,
                 total_chunks,
+                sizes,
                 ttfa_ms,
+                primed_ms,
+                extra_preroll_ms,
+                round(total_stall_ms, 1),
                 len(clean_text),
                 total_audio_s,
                 total_synth_ms,
@@ -1244,26 +1575,55 @@ class TTSEngine:
                     mode = self._engine_mode
 
                 try:
-                    # Fast Producer-Consumer streaming path for multi-sentence Gooya replies
-                    if mode == 'gooya':
-                        chunks = self._build_chunks_for_gooya(clean_text, cfg)
-                        if len(chunks) > 1:
-                            return self._speak_gooya_pipelined(chunks, clean_text, tone, cfg, gen_id, t_total)
+                    # Dynamic Runway streaming path for multi-sentence / longer Gooya replies
+                    if mode == 'gooya' and bool(cfg.get('gooya_chunking_enabled', True)):
+                        flat = re.sub(r'\s+', ' ', clean_text).strip()
+                        single_shot_max = int(cfg.get('gooya_single_shot_max_chars', 115))
+                        if len(flat) > single_shot_max:
+                            sentences = self._split_atomic_sentences(clean_text)
+                            if sentences:
+                                return self._speak_gooya_dynamic_pipelined(sentences, clean_text, tone, cfg, gen_id, t_total)
 
-                    # Single-shot path (Gemini or short single-chunk Gooya utterance)
+                    # Single-shot path (Gemini or short <=115-char Gooya utterance for 100% native prosody)
                     pcm, sr = self.synthesize(clean_text, tone=tone, turn_id=get_turn_id())
                     meta = dict(self._last_synth_meta)
                     if pcm is not None and len(pcm) > 0 and gen_id == self._speech_generation_id:
+                        preroll_ms = self._get_audio_preroll_ms(cfg)
+                        pcm_to_play = self._prepend_preroll(pcm, sr, preroll_ms)
                         ttfa_ms = round((time.perf_counter() - t_total) * 1000.0, 1)
-                        play_ms = self._playback_audio(pcm, sample_rate=sr, blocking=True)
+                        playback_mocked = '_playback_audio' in self.__dict__
+                        use_continuous = bool(cfg.get('gooya_use_continuous_audio', True)) and (_sd is not None) and (not playback_mocked)
+                        if use_continuous:
+                            single_player = _ContinuousAudioPlayer()
+                            with self._lock:
+                                self._active_player = single_player
+                            try:
+                                play_ms = single_player.play_chunk(
+                                    pcm_to_play,
+                                    sample_rate=sr,
+                                    is_cancelled=lambda: gen_id != self._speech_generation_id,
+                                )
+                            except Exception as sd_exc:
+                                logger.warning('Single-shot sounddevice playback failed (%s); falling back to winsound', sd_exc)
+                                single_player.close(aborted=True)
+                                play_ms = self._playback_audio(pcm_to_play, sample_rate=sr, blocking=True)
+                            else:
+                                single_player.close(aborted=(gen_id != self._speech_generation_id))
+                            finally:
+                                with self._lock:
+                                    if self._active_player is single_player:
+                                        self._active_player = None
+                        else:
+                            play_ms = self._playback_audio(pcm_to_play, sample_rate=sr, blocking=True)
                         total_ms = round((time.perf_counter() - t_total) * 1000.0, 1)
                         logger.info(
-                            'TTS Turn Complete | req=%s used=%s fallback=%s%s | chunks=1/1 | ttfa=%.1fms | chars=%d audio=%ss | synth=%.1fms dsp=%.1fms play=%.1fms total=%.1fms',
+                            'TTS Turn Complete | req=%s used=%s fallback=%s%s | chunks=1/1 | ttfa=%.1fms preroll=%dms stall=0.0ms | chars=%d audio=%ss | synth=%.1fms dsp=%.1fms play=%.1fms total=%.1fms',
                             meta.get('engine_requested', '?'),
                             meta.get('engine_used', '?'),
                             meta.get('fallback_triggered', False),
                             f" ({meta.get('fallback_reason')})" if meta.get('fallback_triggered') else '',
                             ttfa_ms,
+                            preroll_ms,
                             len(clean_text),
                             meta.get('audio_duration_s', '?'),
                             float(meta.get('synth_ms', 0.0)),
@@ -1292,6 +1652,12 @@ class TTSEngine:
         with self._lock:
             self._speech_generation_id += 1
             self._speaking = False
+            player = self._active_player
+        if player is not None:
+            try:
+                player.abort()
+            except Exception:
+                pass
         try:
             import winsound
             winsound.PlaySound(None, winsound.SND_PURGE)
@@ -1312,14 +1678,14 @@ def get_tts_engine() -> TTSEngine:
 
 if __name__ == '__main__':
     print('=' * 60)
-    print('C.E.L.E.S.T.E. TTSEngine Self-Test (Dual-Engine + Pipelined Gooya)')
+    print('C.E.L.E.S.T.E. TTSEngine Self-Test (Phase 1.5 Dynamic Runway)')
     print('=' * 60)
 
     t_start = time.time()
     engine = TTSEngine(auto_preload=False)
     engine.preload_gooya = lambda blocking=False: True
     status = engine.get_status()
-    print(f'Initialization: OK | Engine Mode: {status["engine_mode"]}')
+    print(f'Initialization: OK | Engine Mode: {status["engine_mode"]} | ContinuousAudio: {status["continuous_audio_available"]}')
     assert status['initialized'] is True
 
     test_raw = 'سلام [لحن: شاد و پرانرژی] من C.E.L.E.S.T.E. هستم! <think>thought</think><think>unclosed'
@@ -1328,34 +1694,58 @@ if __name__ == '__main__':
     assert 'سلست' in clean and '<think>' not in clean and 'unclosed' not in clean
     assert tone == 'شاد و پرانرژی'
 
-    # Test 2-tier Persian/English chunker
+    # Test 1: Short text (<=115 chars) stays single-shot for 100% prosody
+    short_reply = 'دمای پردازنده الان ۴۸ درجه است و همه سیستم‌ها پایدار هستند مهندس.'
+    assert len(engine.split_text_for_streaming_tts(short_reply)) == 1
+
+    # Test 2: Sentence-first splitting + decimal preservation
+    decimal_text = 'قیمت امروز ۴۴.۵ تومان و نسخه سیستم 2.0 است. آیا عملیات را همین الان شروع کنم مهندس؟ همه چیز برای اجرا کاملاً آماده و تست شده است.'
+    dec_chunks = engine.split_text_for_streaming_tts(decimal_text)
+    assert any('۴۴.۵' in c for c in dec_chunks) and any('2.0' in c for c in dec_chunks)
+
+    # Test 3: Dynamic Runway Scheduler on 4-sentence literary text
     sample_literary = (
         'در سکوت شب، باد آرام از میان درختان می‌گذشت و برگ‌ها را به رقص درمی‌آورد. '
         'ماه کامل در آسمان صاف می‌درخشید و نور نقره‌ای خود را بر زمین می‌پاشید. '
         'صدای جویبار از دور به گوش می‌رسید و آرامشی عمیق در دل شب جاری بود. '
         'همه چیز در خوابی شیرین فرو رفته بود و زمان گویی ایستاده بود.'
     )
-    chunks = engine.split_text_for_streaming_tts(sample_literary)
-    print(f'Chunker test: {len(chunks)} chunks -> lengths {[len(c) for c in chunks]}')
-    assert len(chunks) >= 3
-    assert len(chunks[0]) <= 80
-
-    # Ensure decimals are never split
-    decimal_text = 'قیمت امروز ۴۴.۵ تومان و نسخه سیستم 2.0 است. آیا عملیات را شروع کنم مهندس؟'
-    dec_chunks = engine.split_text_for_streaming_tts(decimal_text, first_max_chars=50)
-    assert any('۴۴.۵' in c for c in dec_chunks) and any('2.0' in c for c in dec_chunks)
-
-    # Test Producer-Consumer pipeline with mock Gooya & mock playback
     engine.set_engine_mode('gooya')
-    played_chunks = []
-    engine._synthesize_gooya = lambda text, cfg, defer_auto_unload=False, chunk_index=1, total_chunks=1: (
-        engine._last_synth_meta.update({'engine_used': 'gooya', 'synth_ms': 25.0, 'dsp_ms': 1.0, 'audio_duration_s': 0.5}) or
-        (np.zeros(12000, dtype=np.float32), 24000)
-    )
+    synth_texts: List[str] = []
+    played_chunks: List[int] = []
+
+    def _mock_gooya(text, cfg, defer_auto_unload=False, chunk_index=1, total_chunks=1, is_continuation=False):
+        synth_texts.append(text)
+        est_audio_s = round(len(text) * 0.074, 2)
+        engine._update_ewma_metrics(len(text), est_audio_s, 0.58)
+        engine._last_synth_meta.update({
+            'engine_used': 'gooya',
+            'synth_ms': 25.0,
+            'dsp_ms': 1.0,
+            'audio_duration_s': est_audio_s,
+            'rtf': 0.58,
+        })
+        return np.zeros(12000, dtype=np.float32), 24000
+
+    engine._synthesize_gooya = _mock_gooya
     engine._playback_audio = lambda pcm, sample_rate=24000, blocking=True: (played_chunks.append(len(pcm)) or 10.0)
+
     ok = engine.speak(sample_literary, blocking=True)
-    assert ok is True and len(played_chunks) == len(chunks)
-    print(f'Pipelined Gooya mock test: OK ({len(played_chunks)} chunks played seamlessly)')
+    expected_preroll_samples = int(round(24000 * (engine._get_audio_preroll_ms(engine._config) / 1000.0)))
+    print(f'Dynamic Runway mock test: OK | chunks={len(played_chunks)} sizes={[len(t) for t in synth_texts]} played_samples={played_chunks}')
+    assert ok is True and len(played_chunks) == len(synth_texts) and len(synth_texts) >= 3
+    # Verify preroll applied ONLY to chunk 1 and never to chunks 2..N
+    assert played_chunks[0] == 12000 + expected_preroll_samples
+    assert all(n == 12000 for n in played_chunks[1:])
+    # Verify Chunk 1 preserved the entire first sentence intact (73 chars) without mid-sentence cut!
+    assert synth_texts[0].endswith('.')
+
+    # Test 4: Oversized single sentence splits cleanly at Persian comma with continuation=True
+    long_single = 'باد پاییزی از میان کوچه‌های قدیمی شهر می‌گذشت، برگ‌های زرد را روی سنگفرش می‌چرخاند، عطر باران را با خود می‌آورد، و یاد خاطرات دور را در دل رهگذران زنده می‌کرد.'
+    rem_long = engine._split_atomic_sentences(long_single)
+    ch1, is_cont1 = engine._pop_next_dynamic_chunk(rem_long, target_max=105, target_min=42, vram_max=150, is_first=True)
+    assert is_cont1 is True and ch1.endswith('،') and len(rem_long) == 1
+    print(f'Long single-sentence continuation test: OK | chunk1={len(ch1)} chars (ends with comma), rem={len(rem_long[0])} chars')
 
     engine.update_config({'engine_mode': 'gemini', 'gemini_voice_name': 'Kore'})
     st_after = engine.get_status()
@@ -1372,5 +1762,5 @@ if __name__ == '__main__':
     engine._synthesize_gemini = original_gemini
 
     engine.shutdown()
-    print(f'All self-tests passed in {time.time() - t_start:.2f} seconds.')
+    print(f'All Phase 1.5 self-tests passed in {time.time() - t_start:.2f} seconds.')
     print('=' * 60)

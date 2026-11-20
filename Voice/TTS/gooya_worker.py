@@ -1,17 +1,15 @@
-# C.E.L.E.S.T.E. Voice - Gooya Bozorg v1.5 Isolated Low-Latency Worker
+# C.E.L.E.S.T.E. Voice - Gooya Bozorg v1.5 Isolated Low-Latency Worker (Phase 1.5)
 # Runs in Data/Models/gooya/venv (Python 3.11 with torch 2.6.0+cu124)
-# Stability & Latency architecture:
+# Architecture:
 #   - Strictly offline (HF_HUB_OFFLINE=1, TRANSFORMERS_OFFLINE=1) + TQDM_DISABLE=1
 #   - Windows-safe CUDA allocator fragmentation cap (max_split_size_mb:128)
-#   - T3 in bfloat16 + SDPA (saves ~1.05 GB VRAM)
-#   - S3Gen & VoiceEncoder strictly in float32 + TF32 (zero bf16 token/length crash)
-#   - Adaptive n_cfm_timesteps introspection, startup CUDA kernel warmup,
-#     conditional VRAM cache trim (<2.45 GB reserved), and click-free chunk audio polish
+#   - T3 in bfloat16 + SDPA; S3Gen & VE strictly in float32 + TF32
+#   - Full-fidelity default cfm_timesteps=10, comma-preserving Persian prosody,
+#     continuation-aware breath cushions, startup CUDA warmup, and VRAM cap (<2.45 GB)
 from __future__ import annotations
 
 import os
 
-# Enforce offline cache, CUDA allocator tuning & disable tqdm/warnings BEFORE importing torch/hf/chatterbox
 os.environ['PYTHONWARNINGS'] = 'ignore'
 os.environ['TQDM_DISABLE'] = '1'
 os.environ['HF_HUB_OFFLINE'] = '1'
@@ -122,23 +120,39 @@ def _get_vram_stats() -> Dict[str, float]:
         return {'vram_allocated_mb': 0.0, 'vram_reserved_mb': 0.0}
 
 
-def _normalize_persian_text(raw_text: str) -> str:
-    """Clean Persian/English text for Gooya T3 without corrupting Persian punctuation."""
+def _normalize_persian_text(raw_text: str, is_continuation: bool = False) -> str:
+    """Clean Persian/English text for Gooya T3 while strictly preserving Persian prosody punctuation."""
     text = (raw_text or '').strip()
     if not text:
         return ''
     text = text.replace('\u064a', '\u06cc').replace('\u0649', '\u06cc').replace('\u0643', '\u06a9')
     text = re.sub(r'[\U00010000-\U0010ffff]', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
+
+    ended_with_continuation = text.endswith(('،', ',', '؛', ';', ':', '—', '–'))
     if punc_norm is not None:
         text = punc_norm(text)
+
+    # Restore Persian punctuation without forcing artificial declarative full-stops mid-sentence
     text = re.sub(r'؟\.+$', '؟', text)
-    text = re.sub(r'،\.+$', '.', text)
+    text = re.sub(r'،\.+$', '،', text)
+    text = re.sub(r'؛\.+$', '؛', text)
+    text = re.sub(r',\.+$', ',', text)
+
+    # If this chunk was split mid-sentence without trailing comma, avoid a harsh synthetic period
+    if is_continuation and not ended_with_continuation and text.endswith('.') and not text.endswith('...'):
+        text = text[:-1].rstrip() + '،'
+
     return text.strip()
 
 
-def _polish_chunk_audio(audio: np.ndarray, sr: int, trim_silence: bool = True) -> np.ndarray:
-    """Remove DC offset, trim excessive leading/trailing dead air, and apply micro cosine fades."""
+def _polish_chunk_audio(
+    audio: np.ndarray,
+    sr: int,
+    trim_silence: bool = True,
+    is_continuation: bool = False,
+) -> np.ndarray:
+    """Remove DC offset, trim excessive dead air with prosody-aware breath pads, and apply micro-fades."""
     if audio is None or audio.size == 0:
         return np.zeros(0, dtype=np.float32)
 
@@ -151,17 +165,18 @@ def _polish_chunk_audio(audio: np.ndarray, sr: int, trim_silence: bool = True) -
         out -= mean_dc
 
     if trim_silence:
-        active = np.flatnonzero(np.abs(out) > 0.008)
+        # Sensitive threshold (0.006) protects soft Persian trailing consonants (ه، س، ش، ف)
+        active = np.flatnonzero(np.abs(out) > 0.006)
         if active.size > 0:
-            lead_pad = int(sr * 0.025)   # 25ms natural attack cushion
-            trail_pad = int(sr * 0.075)  # 75ms natural word-ending cushion
+            lead_pad = int(sr * 0.030)
+            trail_pad = int(sr * (0.045 if is_continuation else 0.095))
             start = max(0, int(active[0]) - lead_pad)
             end = min(out.size, int(active[-1]) + trail_pad)
             if end - start >= int(sr * 0.08):
                 out = out[start:end]
 
-    fade_in = min(int(sr * 0.008), out.size // 4)
-    fade_out = min(int(sr * 0.012), out.size // 4)
+    fade_in = min(int(sr * 0.006), out.size // 4)
+    fade_out = min(int(sr * 0.010), out.size // 4)
     if fade_in > 1:
         ramp_in = 0.5 * (1.0 - np.cos(np.linspace(0.0, np.pi, fade_in, dtype=np.float32)))
         out[:fade_in] *= ramp_in
@@ -379,7 +394,6 @@ class GooyaWorker:
         if load_model is None:
             raise RuntimeError('load_model import not available')
 
-        # Ampere TF32 for fast fp32 S3Gen; keep cudnn.benchmark=False for variable-length audio stability & low VRAM
         if self.device == 'cuda' and torch.cuda.is_available():
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
@@ -468,15 +482,16 @@ class GooyaWorker:
         precision: Optional[str] = None,
         temperature: float = 0.75,
         repetition_penalty: float = 1.25,
-        cfm_timesteps: int = 8,
+        cfm_timesteps: int = 10,
         vram_trim_threshold_mb: float = 2450.0,
         trim_silence: bool = True,
+        is_continuation: bool = False,
         chunk_info: str = '',
     ) -> dict:
         if self.model is None:
             self.load(precision=precision or self.precision, ref_audio=ref_audio, exaggeration=exaggeration)
 
-        clean_text = _normalize_persian_text(text)
+        clean_text = _normalize_persian_text(text, is_continuation=bool(is_continuation))
         if not clean_text:
             return {'status': 'error', 'error': 'Empty text'}
 
@@ -503,7 +518,6 @@ class GooyaWorker:
         text_tokens = F.pad(text_tokens, (1, 0), value=sot)
         text_tokens = F.pad(text_tokens, (0, 1), value=eot)
 
-        # Dynamic max_new_tokens cap tailored for both short chunks and full replies
         max_new_tokens = max(120, min(650, int(len(clean_text) * 3.2) + 60))
 
         t_t3_0 = time.perf_counter()
@@ -545,13 +559,11 @@ class GooyaWorker:
             del speech_tokens
             return {'status': 'error', 'error': 'T3 generated zero valid speech tokens'}
 
-        # S3Gen runs strictly in float32 (OUTSIDE autocast) -> zero bf16 token/length corruption
         t_s3_0 = time.perf_counter()
         with torch.inference_mode():
             wav_tensor, _ = self._run_s3gen_fp32(speech_tokens, cfm_timesteps=cfm_timesteps)
             wav = wav_tensor.squeeze(0).detach().float().cpu().numpy()
 
-            # Drop final speech token (~40ms trailing noise before EOS)
             st_len = max(1, n_tokens - 1)
             wav = wav[: st_len * (S3GEN_SR // S3_TOKEN_RATE)]
 
@@ -560,7 +572,12 @@ class GooyaWorker:
         gen_ms = round(t3_ms + s3gen_ms, 1)
 
         sr = int(self.model.sr)
-        audio_np = _polish_chunk_audio(wav, sr=sr, trim_silence=bool(trim_silence))
+        audio_np = _polish_chunk_audio(
+            wav,
+            sr=sr,
+            trim_silence=bool(trim_silence),
+            is_continuation=bool(is_continuation),
+        )
 
         stats = _get_vram_stats()
         if torch.cuda.is_available() and stats['vram_reserved_mb'] > vram_trim_threshold_mb:
@@ -571,10 +588,11 @@ class GooyaWorker:
         audio_duration_s = round(len(audio_np) / float(sr), 3) if sr > 0 else 0.0
         rtf = round(latency_s / max(audio_duration_s, 1e-6), 3)
         chunk_tag = f' [chunk {chunk_info}]' if chunk_info else ''
+        cont_tag = ' cont' if is_continuation else ''
 
         logger.info(
-            'Synthesized%s %.2fs audio in %.2fs | chars=%d tokens=%d/%d cfm=%d (conds=%.1fms t3=%.1fms s3gen=%.1fms RTF=%.2f) | VRAM alloc=%.1f MB, reserved=%.1f MB',
-            chunk_tag, audio_duration_s, latency_s, len(clean_text), n_tokens, max_new_tokens,
+            'Synthesized%s %.2fs audio in %.2fs | chars=%d%s tokens=%d/%d cfm=%d (conds=%.1fms t3=%.1fms s3gen=%.1fms RTF=%.2f) | VRAM alloc=%.1f MB, reserved=%.1f MB',
+            chunk_tag, audio_duration_s, latency_s, len(clean_text), cont_tag, n_tokens, max_new_tokens,
             cfm_timesteps, conds_ms, t3_ms, s3gen_ms, rtf,
             stats['vram_allocated_mb'], stats['vram_reserved_mb'],
         )
@@ -640,9 +658,10 @@ def main():
                     precision=req.get('precision'),
                     temperature=req.get('temperature', 0.75),
                     repetition_penalty=req.get('repetition_penalty', 1.25),
-                    cfm_timesteps=int(req.get('cfm_timesteps', 8)),
+                    cfm_timesteps=int(req.get('cfm_timesteps', 10)),
                     vram_trim_threshold_mb=float(req.get('vram_trim_threshold_mb', 2450.0)),
                     trim_silence=bool(req.get('trim_silence', True)),
+                    is_continuation=bool(req.get('is_continuation', False)),
                     chunk_info=str(req.get('chunk_info', '')),
                 )
             elif cmd == 'unload':
