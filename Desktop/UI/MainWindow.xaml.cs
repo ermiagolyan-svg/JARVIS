@@ -101,14 +101,14 @@ public partial class MainWindow : Window
     private bool _rightOpen;
     private bool _bottomOpen;
 
-    // Theme 1 (Cyber-Ice Dark) Brushes
-    private readonly SolidColorBrush _iceBlueBrush = new((Color)ColorConverter.ConvertFromString("#38BDF8"));
-    private readonly SolidColorBrush _quantumCyanBrush = new((Color)ColorConverter.ConvertFromString("#00F0FF"));
-    private readonly SolidColorBrush _frostWhiteBrush = new((Color)ColorConverter.ConvertFromString("#F8FAFC"));
-    private readonly SolidColorBrush _amberGlitchBrush = new((Color)ColorConverter.ConvertFromString("#F59E0B"));
-    private readonly SolidColorBrush _crimsonCoreBrush = new((Color)ColorConverter.ConvertFromString("#F43F5E"));
-    private readonly SolidColorBrush _crimsonBrightBrush = new((Color)ColorConverter.ConvertFromString("#FF2A55"));
-    private readonly SolidColorBrush _crimsonDeepBrush = new((Color)ColorConverter.ConvertFromString("#BE123C"));
+    // Theme 1 (Gruvbox Material Dark) Brushes
+    private readonly SolidColorBrush _iceBlueBrush = new((Color)ColorConverter.ConvertFromString("#D8A657"));
+    private readonly SolidColorBrush _quantumCyanBrush = new((Color)ColorConverter.ConvertFromString("#E78A4E"));
+    private readonly SolidColorBrush _frostWhiteBrush = new((Color)ColorConverter.ConvertFromString("#D4BE98"));
+    private readonly SolidColorBrush _amberGlitchBrush = new((Color)ColorConverter.ConvertFromString("#D8A657"));
+    private readonly SolidColorBrush _crimsonCoreBrush = new((Color)ColorConverter.ConvertFromString("#EA6962"));
+    private readonly SolidColorBrush _crimsonBrightBrush = new((Color)ColorConverter.ConvertFromString("#F2594B"));
+    private readonly SolidColorBrush _crimsonDeepBrush = new((Color)ColorConverter.ConvertFromString("#C14A4A"));
 
     // Theme 2 (Transparent LCD White/Black High-Contrast) Brushes
     private readonly SolidColorBrush _lcdPitchBlackBrush = new((Color)ColorConverter.ConvertFromString("#000000"));
@@ -295,6 +295,18 @@ public partial class MainWindow : Window
 
     private void BtnThemeSwitch_Click(object sender, RoutedEventArgs e) => ToggleLcdTheme();
 
+    private void BtnGlobeMode_Click(object sender, RoutedEventArgs e) => ToggleGlobeMode();
+
+    private void ToggleGlobeMode()
+    {
+        CosmicSphere.IsEarthMode = !CosmicSphere.IsEarthMode;
+        BtnGlobeMode.Content = CosmicSphere.IsEarthMode ? "EARTH GLOBE" : "COSMIC SPHERE";
+        TxtStatusBar.Text = CosmicSphere.IsEarthMode
+            ? "HUD Projection: Tactical Earth Globe (Natural Earth + Capital Synapses)"
+            : "HUD Projection: Cosmic Star Sphere (740 Nodes)";
+        CosmicSphere.InvalidateVisual();
+    }
+
     private void ToggleLcdTheme()
     {
         _isLightLcdTheme = !_isLightLcdTheme;
@@ -332,61 +344,61 @@ public partial class MainWindow : Window
             res["UserBubbleBgBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#120369A1"));
 
             AmbientHalo.Visibility = Visibility.Collapsed;
-            BtnThemeSwitch.Content = "🌙 CYBER DARK";
+            BtnThemeSwitch.Content = "GRUVBOX DARK";
         }
         else
         {
-            res["BgDeepNavyBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#05070B"));
+            res["BgDeepNavyBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#141617"));
 
             var radial = new RadialGradientBrush { Center = new Point(0.5, 0.5), RadiusX = 0.75, RadiusY = 0.75 };
-            radial.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#0D1526"), 0.0));
-            radial.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#070A12"), 0.55));
-            radial.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#040508"), 1.0));
+            radial.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#1F2223"), 0.0));
+            radial.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#17191A"), 0.55));
+            radial.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#111314"), 1.0));
             res["BackdropRadialBrush"] = radial;
 
             var panelGrad = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
-            panelGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#F00E1525"), 0.0));
-            panelGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#F5080C14"), 1.0));
+            panelGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#F21C1F20"), 0.0));
+            panelGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#F7141617"), 1.0));
             res["BgPanelBrush"] = panelGrad;
 
             var cardGrad = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
-            cardGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#CC162033"), 0.0));
-            cardGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#CC0F1624"), 1.0));
+            cardGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#CC242728"), 0.0));
+            cardGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#CC1B1E1F"), 1.0));
             res["BgCardBrush"] = cardGrad;
 
             var borderGrad = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
-            borderGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#5538BDF8"), 0.0));
-            borderGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#1838BDF8"), 0.5));
-            borderGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#4400F0FF"), 1.0));
+            borderGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#55E78A4E"), 0.0));
+            borderGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#22D4BE98"), 0.5));
+            borderGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#44D8A657"), 1.0));
             res["GlassBorderBrush"] = borderGrad;
 
             var cyanGrad = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
-            cyanGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#0284C7"), 0.0));
-            cyanGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#38BDF8"), 0.5));
-            cyanGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#00F0FF"), 1.0));
+            cyanGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#C96A32"), 0.0));
+            cyanGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#E78A4E"), 0.5));
+            cyanGrad.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#D8A657"), 1.0));
             res["CyanGradientBrush"] = cyanGrad;
 
-            res["BgInputBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#090D16"));
-            res["BgSubtlePillBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#090D16"));
-            res["BgDockPillBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#CC090D16"));
-            res["GridBgBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#080B12"));
-            res["GridRowBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0B101B"));
-            res["GridAltRowBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0F1624"));
-            res["GridHeaderBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#131C2E"));
+            res["BgInputBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#191B1C"));
+            res["BgSubtlePillBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1C1F20"));
+            res["BgDockPillBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D8191B1C"));
+            res["GridBgBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#121415"));
+            res["GridRowBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#181A1B"));
+            res["GridAltRowBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E2122"));
+            res["GridHeaderBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#242729"));
 
             res["CyanPrimaryBrush"] = _iceBlueBrush;
             res["CyanSecondaryBrush"] = _quantumCyanBrush;
             res["TextPrimaryBrush"] = _frostWhiteBrush;
-            res["TextMutedBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#64748B"));
-            res["CyanBorderDimBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2838BDF8"));
+            res["TextMutedBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#928374"));
+            res["CyanBorderDimBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#33D4BE98"));
 
-            res["BtnDefaultBgBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1638BDF8"));
-            res["BtnDefaultBorderBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4538BDF8"));
-            res["BtnHoverBgBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2E38BDF8"));
-            res["UserBubbleBgBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1F0EA5E9"));
+            res["BtnDefaultBgBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1CE78A4E"));
+            res["BtnDefaultBorderBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#52E78A4E"));
+            res["BtnHoverBgBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#33E78A4E"));
+            res["UserBubbleBgBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#26E78A4E"));
 
             AmbientHalo.Visibility = Visibility.Visible;
-            BtnThemeSwitch.Content = "☀ LCD THEME";
+            BtnThemeSwitch.Content = "\u2600 LCD THEME";
         }
 
         HandleWsConnectionState(_client.IsWsConnected);
@@ -428,6 +440,11 @@ public partial class MainWindow : Window
         {
             e.Handled = true;
             ToggleLcdTheme();
+        }
+        else if (e.Key == Key.F8)
+        {
+            e.Handled = true;
+            ToggleGlobeMode();
         }
         else if (e.Key == Key.F9)
         {
@@ -773,36 +790,36 @@ public partial class MainWindow : Window
         if (isRedAlert)
         {
             stateBrush = _crimsonCoreBrush;
-            HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#48F43F5E");
+            HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#48EA6962");
             TxtReactorSubtitle.Text = "⚠ CRITICAL COMMAND PENDING // منتظر تایید دستور حساس توسط شما...";
         }
         else if (_isMuted)
         {
             stateBrush = _crimsonCoreBrush;
-            HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#22F43F5E");
+            HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#22EA6962");
             TxtReactorSubtitle.Text = "AUDIO INPUT MUTED // ورودی صوتی غیرفعال است";
         }
         else if (_currentState.Contains("LISTEN"))
         {
             stateBrush = activeAccent;
-            HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#3800F0FF");
+            HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#34E78A4E");
             TxtReactorSubtitle.Text = "LISTENING // در حال دریافت امواج صوتی...";
         }
         else if (_currentState.Contains("THINK"))
         {
             stateBrush = _isLightLcdTheme ? _lcdDarkCobaltBrush : _amberGlitchBrush;
-            HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#2DF59E0B");
+            HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#2DD8A657");
             TxtReactorSubtitle.Text = "TACTICAL ANALYSIS // در حال پردازش منطقی در هسته...";
         }
         else if (_currentState.Contains("SPEAK"))
         {
             stateBrush = activeAccent;
-            HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#4238BDF8");
+            HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#38E78A4E");
             TxtReactorSubtitle.Text = "VOCAL SYNTHESIS // سلست در حال پاسخگویی...";
         }
         else
         {
-            HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#2238BDF8");
+            HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#1EE78A4E");
             TxtReactorSubtitle.Text = "CYBERNETIC ENGINE ONLINE";
         }
 
@@ -1266,12 +1283,12 @@ public partial class MainWindow : Window
         if (lvl is "ERROR" or "CRITICAL" or "FATAL")
         {
             fg = _crimsonCoreBrush;
-            bg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#28F43F5E"));
+            bg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#28EA6962"));
         }
         else if (lvl is "WARNING" or "WARN")
         {
             fg = _amberGlitchBrush;
-            bg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#26F59E0B"));
+            bg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#26D8A657"));
         }
         else if (lvl == "DEBUG")
         {
@@ -1281,7 +1298,7 @@ public partial class MainWindow : Window
         else
         {
             fg = _isLightLcdTheme ? _lcdDarkCobaltBrush : _quantumCyanBrush;
-            bg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1F38BDF8"));
+            bg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#22E78A4E"));
         }
 
         return new LogDisplayItem

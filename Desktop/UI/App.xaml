@@ -3,63 +3,63 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-        <!-- Default Theme 1: Cyber-Ice Dark Palette (Dynamically swappable with Theme 2 LCD Light) -->
-        <SolidColorBrush x:Key="BgDeepNavyBrush" Color="#05070B"/>
+        <!-- Default Theme 1: Gruvbox Material Dark Palette (#141617 / #D4BE98 / #E78A4E) -->
+        <SolidColorBrush x:Key="BgDeepNavyBrush" Color="#141617"/>
 
         <RadialGradientBrush x:Key="BackdropRadialBrush" Center="0.5,0.5" RadiusX="0.75" RadiusY="0.75">
-            <GradientStop Color="#0D1526" Offset="0.0"/>
-            <GradientStop Color="#070A12" Offset="0.55"/>
-            <GradientStop Color="#040508" Offset="1.0"/>
+            <GradientStop Color="#1F2223" Offset="0.0"/>
+            <GradientStop Color="#17191A" Offset="0.55"/>
+            <GradientStop Color="#111314" Offset="1.0"/>
         </RadialGradientBrush>
 
         <LinearGradientBrush x:Key="BgPanelBrush" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#F00E1525" Offset="0.0"/>
-            <GradientStop Color="#F5080C14" Offset="1.0"/>
+            <GradientStop Color="#F21C1F20" Offset="0.0"/>
+            <GradientStop Color="#F7141617" Offset="1.0"/>
         </LinearGradientBrush>
 
         <LinearGradientBrush x:Key="BgCardBrush" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#CC162033" Offset="0.0"/>
-            <GradientStop Color="#CC0F1624" Offset="1.0"/>
+            <GradientStop Color="#CC242728" Offset="0.0"/>
+            <GradientStop Color="#CC1B1E1F" Offset="1.0"/>
         </LinearGradientBrush>
 
         <LinearGradientBrush x:Key="GlassBorderBrush" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#5538BDF8" Offset="0.0"/>
-            <GradientStop Color="#1838BDF8" Offset="0.5"/>
-            <GradientStop Color="#4400F0FF" Offset="1.0"/>
+            <GradientStop Color="#55E78A4E" Offset="0.0"/>
+            <GradientStop Color="#22D4BE98" Offset="0.5"/>
+            <GradientStop Color="#44D8A657" Offset="1.0"/>
         </LinearGradientBrush>
 
         <LinearGradientBrush x:Key="CyanGradientBrush" StartPoint="0,0" EndPoint="1,0">
-            <GradientStop Color="#0284C7" Offset="0.0"/>
-            <GradientStop Color="#38BDF8" Offset="0.5"/>
-            <GradientStop Color="#00F0FF" Offset="1.0"/>
+            <GradientStop Color="#C96A32" Offset="0.0"/>
+            <GradientStop Color="#E78A4E" Offset="0.5"/>
+            <GradientStop Color="#D8A657" Offset="1.0"/>
         </LinearGradientBrush>
 
-        <SolidColorBrush x:Key="BgInputBrush" Color="#090D16"/>
-        <SolidColorBrush x:Key="BgSubtlePillBrush" Color="#090D16"/>
-        <SolidColorBrush x:Key="BgDockPillBrush" Color="#CC090D16"/>
-        <SolidColorBrush x:Key="GridBgBrush" Color="#080B12"/>
-        <SolidColorBrush x:Key="GridRowBrush" Color="#0B101B"/>
-        <SolidColorBrush x:Key="GridAltRowBrush" Color="#0F1624"/>
-        <SolidColorBrush x:Key="GridHeaderBrush" Color="#131C2E"/>
+        <SolidColorBrush x:Key="BgInputBrush" Color="#191B1C"/>
+        <SolidColorBrush x:Key="BgSubtlePillBrush" Color="#1C1F20"/>
+        <SolidColorBrush x:Key="BgDockPillBrush" Color="#D8191B1C"/>
+        <SolidColorBrush x:Key="GridBgBrush" Color="#121415"/>
+        <SolidColorBrush x:Key="GridRowBrush" Color="#181A1B"/>
+        <SolidColorBrush x:Key="GridAltRowBrush" Color="#1E2122"/>
+        <SolidColorBrush x:Key="GridHeaderBrush" Color="#242729"/>
 
-        <SolidColorBrush x:Key="CyanPrimaryBrush" Color="#38BDF8"/>
-        <SolidColorBrush x:Key="CyanSecondaryBrush" Color="#00F0FF"/>
-        <SolidColorBrush x:Key="AlertRedBrush" Color="#F43F5E"/>
-        <SolidColorBrush x:Key="ActiveGreenBrush" Color="#10B981"/>
-        <SolidColorBrush x:Key="WarningAmberBrush" Color="#F59E0B"/>
-        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F8FAFC"/>
-        <SolidColorBrush x:Key="TextMutedBrush" Color="#64748B"/>
-        <SolidColorBrush x:Key="CyanBorderDimBrush" Color="#2838BDF8"/>
+        <SolidColorBrush x:Key="CyanPrimaryBrush" Color="#D8A657"/>
+        <SolidColorBrush x:Key="CyanSecondaryBrush" Color="#E78A4E"/>
+        <SolidColorBrush x:Key="AlertRedBrush" Color="#EA6962"/>
+        <SolidColorBrush x:Key="ActiveGreenBrush" Color="#A9B665"/>
+        <SolidColorBrush x:Key="WarningAmberBrush" Color="#D8A657"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#D4BE98"/>
+        <SolidColorBrush x:Key="TextMutedBrush" Color="#928374"/>
+        <SolidColorBrush x:Key="CyanBorderDimBrush" Color="#33D4BE98"/>
 
-        <SolidColorBrush x:Key="BtnDefaultBgBrush" Color="#1638BDF8"/>
-        <SolidColorBrush x:Key="BtnDefaultBorderBrush" Color="#4538BDF8"/>
-        <SolidColorBrush x:Key="BtnHoverBgBrush" Color="#2E38BDF8"/>
-        <SolidColorBrush x:Key="UserBubbleBgBrush" Color="#1F0EA5E9"/>
+        <SolidColorBrush x:Key="BtnDefaultBgBrush" Color="#1CE78A4E"/>
+        <SolidColorBrush x:Key="BtnDefaultBorderBrush" Color="#52E78A4E"/>
+        <SolidColorBrush x:Key="BtnHoverBgBrush" Color="#33E78A4E"/>
+        <SolidColorBrush x:Key="UserBubbleBgBrush" Color="#26E78A4E"/>
 
         <!-- Shared Drop Shadows & Glows -->
         <DropShadowEffect x:Key="PanelShadowEffect" BlurRadius="28" ShadowDepth="8" Direction="270" Color="#000000" Opacity="0.70"/>
-        <DropShadowEffect x:Key="CyanGlowEffect" BlurRadius="14" ShadowDepth="0" Color="#00F0FF" Opacity="0.45"/>
-        <DropShadowEffect x:Key="CrimsonGlowEffect" BlurRadius="16" ShadowDepth="0" Color="#F43F5E" Opacity="0.5"/>
+        <DropShadowEffect x:Key="CyanGlowEffect" BlurRadius="14" ShadowDepth="0" Color="#E78A4E" Opacity="0.45"/>
+        <DropShadowEffect x:Key="CrimsonGlowEffect" BlurRadius="16" ShadowDepth="0" Color="#EA6962" Opacity="0.5"/>
 
         <!-- Minimalist Modern ScrollBar -->
         <Style TargetType="ScrollBar">
@@ -123,9 +123,9 @@
 
         <!-- Crimson Core Danger Button -->
         <Style x:Key="HoloDangerButtonStyle" TargetType="Button" BasedOn="{StaticResource HoloButtonStyle}">
-            <Setter Property="Background" Value="#1AF43F5E"/>
+            <Setter Property="Background" Value="#1AEA6962"/>
             <Setter Property="Foreground" Value="{DynamicResource AlertRedBrush}"/>
-            <Setter Property="BorderBrush" Value="#88F43F5E"/>
+            <Setter Property="BorderBrush" Value="#88EA6962"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -139,11 +139,11 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#38F43F5E"/>
+                                <Setter TargetName="border" Property="Background" Value="#38EA6962"/>
                                 <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AlertRedBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#55F43F5E"/>
+                                <Setter TargetName="border" Property="Background" Value="#55EA6962"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -208,7 +208,7 @@
             <Setter Property="Background" Value="{DynamicResource BgInputBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
             <Setter Property="CaretBrush" Value="{DynamicResource CyanSecondaryBrush}"/>
-            <Setter Property="SelectionBrush" Value="#5538BDF8"/>
+            <Setter Property="SelectionBrush" Value="#55E78A4E"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BtnDefaultBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="12,8"/>

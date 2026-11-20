@@ -133,9 +133,9 @@
                 <Ellipse x:Name="AmbientHalo" Width="680" Height="680" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
                     <Ellipse.Fill>
                         <RadialGradientBrush>
-                            <GradientStop x:Name="HaloInnerStop" Color="#2838BDF8" Offset="0.0"/>
-                            <GradientStop Color="#0C00F0FF" Offset="0.50"/>
-                            <GradientStop Color="#0005070B" Offset="1.0"/>
+                            <GradientStop x:Name="HaloInnerStop" Color="#22E78A4E" Offset="0.0"/>
+                            <GradientStop Color="#0CD4BE98" Offset="0.50"/>
+                            <GradientStop Color="#00141617" Offset="1.0"/>
                         </RadialGradientBrush>
                     </Ellipse.Fill>
                 </Ellipse>
@@ -217,10 +217,15 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Theme Switcher Button -->
-                    <Button x:Name="BtnThemeSwitch" Grid.Column="5" Content="☀ LCD THEME" Width="116"
-                            Style="{StaticResource HoloButtonStyle}" Click="BtnThemeSwitch_Click" Margin="0,0,8,0"
-                            ToolTip="Switch between Dark Cyber-Ice and High-Contrast Transparent LCD White Mode (F10)"/>
+                    <!-- Globe Mode & Theme Switcher Buttons -->
+                    <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                        <Button x:Name="BtnGlobeMode" Content="EARTH GLOBE" Width="112"
+                                Style="{StaticResource HoloButtonStyle}" Click="BtnGlobeMode_Click" Margin="0,0,6,0"
+                                ToolTip="Switch between Tactical Earth Globe and Cosmic Star Sphere (F8)"/>
+                        <Button x:Name="BtnThemeSwitch" Content="&#x2600; LCD THEME" Width="116"
+                                Style="{StaticResource HoloButtonStyle}" Click="BtnThemeSwitch_Click"
+                                ToolTip="Switch between Dark Cyber-Ice and High-Contrast Transparent LCD White Mode (F10)"/>
+                    </StackPanel>
 
                     <!-- Mute Button -->
                     <Button x:Name="BtnMasterMute" Grid.Column="6" Content="MIC ACTIVE" Width="114"
