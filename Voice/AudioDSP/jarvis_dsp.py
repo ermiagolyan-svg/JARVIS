@@ -133,10 +133,9 @@ class JarvisAudioDSP:
     def _presence_eq(self, x: np.ndarray) -> np.ndarray:
         nyquist = self._sr / 2.0
         target_hz = min(self.PRESENCE_FREQ_HZ, nyquist * 0.85)
-        freq = target_hz / nyquist
         q_val = self.PRESENCE_Q
         gain_lin = 10 ** (self.PRESENCE_GAIN_DB / 40.0)
-        w0 = 2.0 * np.pi * freq
+        w0 = 2.0 * np.pi * (target_hz / self._sr)
         alpha = np.sin(w0) / (2.0 * q_val)
         b0 = 1.0 + alpha * gain_lin
         b1 = -2.0 * np.cos(w0)

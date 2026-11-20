@@ -80,8 +80,8 @@ _voice_config: Dict[str, Any] = {
     "gooya_precision": "bf16",
     "gooya_auto_unload": False,
     "language": "fa-IR",
-    "pitch_semitones": -0.3,
-    "dsp_pitch_semitones": -0.3,
+    "pitch_semitones": 0.0,
+    "dsp_pitch_semitones": 0.0,
     "metallic_mix": 0.0,
     "dsp_metallic_mix": 0.0,
     "reverb_decay": 0.0,
@@ -95,7 +95,7 @@ def _sync_voice_config_from_disk() -> Dict[str, Any]:
         from Core.Config.config_loader import get_config
         cfg = get_config()
         v = cfg.get_section("voice") or {}
-        pitch = float(v.get("dsp_pitch_semitones", v.get("pitch_semitones", -0.3)))
+        pitch = float(v.get("dsp_pitch_semitones", v.get("pitch_semitones", 0.0)))
         metallic = float(v.get("dsp_metallic_mix", v.get("metallic_mix", 0.0)))
         reverb = float(v.get("dsp_reverb_mix", v.get("reverb_decay", 0.0)))
         wake_th = float(v.get("wake_threshold", 0.50))
@@ -1190,7 +1190,7 @@ def _run_self_test() -> bool:
     assert "spoken_response" in r_chat.json(), "Missing spoken_response!"
     _check("POST /voice/mute", client.post("/api/v1/voice/mute", json={"muted": True}, headers=headers), 200)
     _check("GET /voice/config", client.get("/api/v1/voice/config", headers=headers), 200)
-    _check("POST /voice/config", client.post("/api/v1/voice/config", json={"pitch_semitones": -0.3, "engine_mode": "gemini"}, headers=headers), 200)
+    _check("POST /voice/config", client.post("/api/v1/voice/config", json={"pitch_semitones": 0.0, "engine_mode": "gemini"}, headers=headers), 200)
     _check("PUT /voice/config", client.put("/api/v1/voice/config", json={"engine_mode": "gooya", "gooya_exaggeration": 0.6}, headers=headers), 200)
     _check("PUT /voice/config (gemini)", client.put("/api/v1/voice/config", json={"engine_mode": "gemini"}, headers=headers), 200)
     _check("GET /memory/history", client.get("/api/v1/memory/history", headers=headers), 200)
