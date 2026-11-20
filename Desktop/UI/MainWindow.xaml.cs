@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -21,6 +22,21 @@ public class ChatDisplayItem
     public string SenderLabel { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
     public string Timestamp { get; set; } = string.Empty;
+    public bool IsUser { get; set; }
+
+    public string DisplaySender => IsUser ? "USER" : "C.E.L.E.S.T.E.";
+    public HorizontalAlignment BubbleAlignment => IsUser ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+    public Thickness AccentBorderThickness => IsUser ? new Thickness(1, 1, 3, 1) : new Thickness(3, 1, 1, 1);
+
+    public string ShortTimestamp
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Timestamp)) return string.Empty;
+            int sp = Timestamp.IndexOf(' ');
+            return sp >= 0 && sp + 1 < Timestamp.Length ? Timestamp[(sp + 1)..] : Timestamp;
+        }
+    }
 }
 
 public class LogDisplayItem
@@ -38,26 +54,15 @@ public class LogDisplayItem
     public Brush LevelBadgeBg { get; init; } = Brushes.Transparent;
 }
 
-internal sealed class StarParticle
-{
-    public double BaseX;
-    public double BaseY;
-    public double BaseZ;
-    public double BaseSize;
-    public double PhaseOffset;
-    public double ScreenX;
-    public double ScreenY;
-    public double Depth;
-    public int ColorTier; // 0 = Core, 1 = Primary, 2 = Secondary
-    public Ellipse Dot = null!;
-}
-
 public partial class MainWindow : Window
 {
     private const string ConfigFilePath = @"D:\AI\JARVIS\Configuration\config.json";
 
     private readonly JarvisBackendClient _client;
-    private readonly DispatcherTimer _animTimer;
+    private readonly WasapiAudioMeter _audioMeter = new();
+    private readonly Stopwatch _frameWatch = new();
+    private double _lastRenderSec;
+    private bool _renderLoopAttached;
     private readonly DispatcherTimer _pollTimer;
     private readonly ObservableCollection<ChatDisplayItem> _chatMessages = new();
     private List<LogEntryItem> _cachedLogs = new();
@@ -73,27 +78,21 @@ public partial class MainWindow : Window
     private bool _isLightLcdTheme;
     private readonly WindowChrome _defaultWindowChrome;
 
-    // 3D Cosmic Star Sphere (740 Stars & 85 Neural Synapses)
-    private const int StarCount = 740;
-    private const int SynapseCount = 85;
-    private readonly List<StarParticle> _stars = new(StarCount);
-    private readonly List<Ellipse> _listeningWaves = new();
-    private readonly List<Line> _synapseLines = new(SynapseCount);
-    private Ellipse? _outerOrbitRing;
-    private Ellipse? _innerOrbitRing;
-    private RotateTransform? _outerOrbitRotate;
-    private RotateTransform? _innerOrbitRotate;
-
-    private double _rotY;
-    private double _rotX;
-    private double _phaseTime;
-    private double _currentRadius = 220.0;
+    // Dynamic HUD & Sphere State
+    private int _lastClockSecond = -1;
     private double _currentRms;
     private bool _isMuted;
     private string _currentState = "IDLE";
+    private string _currentModelName = "Gemma-4 26B-A4B";
+    private bool _currentModelLoaded = true;
+    private bool _currentLumiaConnected;
+    private string _currentActiveMic = "local";
     private string? _activePendingActionId;
     private bool _testRedAlertMode;
     private string _lastSeenWsMessage = string.Empty;
+    private DateTime _lastWsHudUpdateUtc = DateTime.MinValue;
+
+    private static readonly JsonSerializerOptions TelemetryJsonOpts = new() { PropertyNameCaseInsensitive = true };
 
     private bool IsRedAlertActive => _testRedAlertMode || !string.IsNullOrWhiteSpace(_activePendingActionId);
 
@@ -119,11 +118,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        FreezeBrushes();
+
         _defaultWindowChrome = WindowChrome.GetWindowChrome(this);
         LstConversation.ItemsSource = _chatMessages;
-
-        InitializeCosmicSphere();
-
         LstLogs.ItemsSource = _visibleLogs;
 
         _client = new JarvisBackendClient();
@@ -132,23 +130,49 @@ public partial class MainWindow : Window
         _client.OnConnectionStateChanged += HandleWsConnectionState;
         _client.OnClientLog += msg => Dispatcher.InvokeAsync(() => TxtStatusBar.Text = msg);
 
-        // 60 FPS Cosmic Sphere & HUD Renderer
-        _animTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-        _animTimer.Tick += AnimTimer_Tick;
-        _animTimer.Start();
+        // VSync-locked 60Hz Hardware Renderer (zero DispatcherTimer judder/ghosting)
+        _frameWatch.Start();
+        AttachRenderLoop();
 
         // 2.5s Telemetry & Status sync
         _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2500) };
         _pollTimer.Tick += async (_, _) => await PollBackendSubsystemsAsync();
         _pollTimer.Start();
 
+        StateChanged += (_, _) =>
+        {
+            if (WindowState == WindowState.Minimized)
+            {
+                DetachRenderLoop();
+            }
+            else
+            {
+                AttachRenderLoop();
+            }
+        };
+
         Loaded += MainWindow_Loaded;
         Closed += (_, _) =>
         {
-            _animTimer.Stop();
+            DetachRenderLoop();
             _pollTimer.Stop();
+            _audioMeter.Dispose();
             _client.Dispose();
         };
+    }
+
+    private void FreezeBrushes()
+    {
+        _iceBlueBrush.Freeze();
+        _quantumCyanBrush.Freeze();
+        _frostWhiteBrush.Freeze();
+        _amberGlitchBrush.Freeze();
+        _crimsonCoreBrush.Freeze();
+        _crimsonBrightBrush.Freeze();
+        _crimsonDeepBrush.Freeze();
+        _lcdPitchBlackBrush.Freeze();
+        _lcdDeepCarbonBrush.Freeze();
+        _lcdDarkCobaltBrush.Freeze();
     }
 
     // ==================== CLOUD AI & WEB SEARCH CONFIG (config.json) ====================
@@ -305,6 +329,7 @@ public partial class MainWindow : Window
             res["BtnDefaultBgBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#14000000"));
             res["BtnDefaultBorderBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#AA000000"));
             res["BtnHoverBgBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#28000000"));
+            res["UserBubbleBgBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#120369A1"));
 
             AmbientHalo.Visibility = Visibility.Collapsed;
             BtnThemeSwitch.Content = "🌙 CYBER DARK";
@@ -358,72 +383,23 @@ public partial class MainWindow : Window
             res["BtnDefaultBgBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1638BDF8"));
             res["BtnDefaultBorderBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4538BDF8"));
             res["BtnHoverBgBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2E38BDF8"));
+            res["UserBubbleBgBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1F0EA5E9"));
 
             AmbientHalo.Visibility = Visibility.Visible;
             BtnThemeSwitch.Content = "☀ LCD THEME";
         }
 
+        HandleWsConnectionState(_client.IsWsConnected);
         UpdateSphereThemeBrushes();
-        ApplySystemStatus(_currentState, true, "Qwen 3.5 9B", false, _isMuted, "local", TxtPairingPin.Text);
+        ApplySystemStatus(_currentState, _currentModelLoaded, _currentModelName, _currentLumiaConnected, _isMuted, _currentActiveMic, TxtPairingPin.Text);
     }
 
     private void UpdateSphereThemeBrushes()
     {
-        bool isRedAlert = IsRedAlertActive;
-
-        if (_outerOrbitRing != null)
-        {
-            _outerOrbitRing.Stroke = isRedAlert
-                ? _crimsonCoreBrush
-                : (_isLightLcdTheme ? _lcdPitchBlackBrush : _iceBlueBrush);
-            _outerOrbitRing.StrokeThickness = isRedAlert ? 1.8 : (_isLightLcdTheme ? 1.6 : 1.0);
-            _outerOrbitRing.Opacity = isRedAlert ? 0.75 : (_isLightLcdTheme ? 0.55 : 0.22);
-        }
-
-        if (_innerOrbitRing != null)
-        {
-            _innerOrbitRing.Stroke = isRedAlert
-                ? _crimsonDeepBrush
-                : (_isLightLcdTheme ? _lcdPitchBlackBrush : _quantumCyanBrush);
-            _innerOrbitRing.StrokeThickness = isRedAlert ? 1.6 : (_isLightLcdTheme ? 1.5 : 1.0);
-            _innerOrbitRing.Opacity = isRedAlert ? 0.65 : (_isLightLcdTheme ? 0.45 : 0.18);
-        }
-
-        foreach (var line in _synapseLines)
-        {
-            if (isRedAlert)
-            {
-                line.Stroke = _isLightLcdTheme ? _crimsonDeepBrush : _crimsonCoreBrush;
-                line.StrokeThickness = _isLightLcdTheme ? 1.55 : 1.25;
-            }
-            else
-            {
-                line.Stroke = _isLightLcdTheme ? _lcdPitchBlackBrush : _quantumCyanBrush;
-                line.StrokeThickness = _isLightLcdTheme ? 1.25 : 0.85;
-            }
-        }
-
-        foreach (var s in _stars)
-        {
-            if (isRedAlert)
-            {
-                s.Dot.Fill = s.ColorTier == 0
-                    ? _crimsonBrightBrush
-                    : (s.ColorTier == 1 ? _crimsonCoreBrush : _crimsonDeepBrush);
-            }
-            else if (_isLightLcdTheme)
-            {
-                s.Dot.Fill = s.ColorTier == 0
-                    ? _lcdPitchBlackBrush
-                    : (s.ColorTier == 1 ? _lcdPitchBlackBrush : _lcdDeepCarbonBrush);
-            }
-            else
-            {
-                s.Dot.Fill = s.ColorTier == 0
-                    ? _frostWhiteBrush
-                    : (s.ColorTier == 1 ? _quantumCyanBrush : _iceBlueBrush);
-            }
-        }
+        if (CosmicSphere == null) return;
+        CosmicSphere.IsLightLcdTheme = _isLightLcdTheme;
+        CosmicSphere.IsRedAlert = IsRedAlertActive;
+        CosmicSphere.InvalidateVisual();
     }
 
     // ==================== CUSTOM WINDOW CHROME, MAXIMIZE & FULLSCREEN ====================
@@ -462,8 +438,9 @@ public partial class MainWindow : Window
             {
                 TxtPendingActionDetails.Text = "[SENSITIVE] TEST_RED_ALERT — منتظر دستور یا تایید نهایی شما...";
             }
-            UpdateSphereThemeBrushes();
-            ApplySystemStatus(_currentState, true, "Qwen 3.5 9B", false, _isMuted, "local", TxtPairingPin.Text);
+            HandleWsConnectionState(_client.IsWsConnected);
+        UpdateSphereThemeBrushes();
+            ApplySystemStatus(_currentState, _currentModelLoaded, _currentModelName, _currentLumiaConnected, _isMuted, _currentActiveMic, TxtPairingPin.Text);
         }
         else if (e.Key == Key.Escape && _isFullScreen)
         {
@@ -563,326 +540,104 @@ public partial class MainWindow : Window
 
     private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
 
-    // ==================== 3D COSMIC SPHERE & ORBITAL HUD ENGINE (740 STARS) ====================
+    // ==================== 3D COSMIC SPHERE & ORBITAL HUD ENGINE (VSYNC 60HZ + LIVE WASAPI AUDIO) ====================
 
-    private void InitializeCosmicSphere()
+    private void AttachRenderLoop()
     {
-        CosmicSphereCanvas.Children.Clear();
-        _stars.Clear();
-        _listeningWaves.Clear();
-        _synapseLines.Clear();
-
-        double cx = CosmicSphereCanvas.Width * 0.5;
-        double cy = CosmicSphereCanvas.Height * 0.5;
-
-        _outerOrbitRotate = new RotateTransform(0, 300, 300);
-        _outerOrbitRing = new Ellipse
-        {
-            Width = 600,
-            Height = 600,
-            Stroke = _iceBlueBrush,
-            StrokeThickness = 1,
-            StrokeDashArray = new DoubleCollection { 10, 6, 2, 6 },
-            Opacity = 0.22,
-            RenderTransform = _outerOrbitRotate,
-            IsHitTestVisible = false
-        };
-        Canvas.SetLeft(_outerOrbitRing, cx - 300);
-        Canvas.SetTop(_outerOrbitRing, cy - 300);
-        CosmicSphereCanvas.Children.Add(_outerOrbitRing);
-
-        _innerOrbitRotate = new RotateTransform(0, 260, 260);
-        _innerOrbitRing = new Ellipse
-        {
-            Width = 520,
-            Height = 520,
-            Stroke = _quantumCyanBrush,
-            StrokeThickness = 1,
-            StrokeDashArray = new DoubleCollection { 4, 14 },
-            Opacity = 0.18,
-            RenderTransform = _innerOrbitRotate,
-            IsHitTestVisible = false
-        };
-        Canvas.SetLeft(_innerOrbitRing, cx - 260);
-        Canvas.SetTop(_innerOrbitRing, cy - 260);
-        CosmicSphereCanvas.Children.Add(_innerOrbitRing);
-
-        for (int w = 0; w < 3; w++)
-        {
-            var ring = new Ellipse
-            {
-                Stroke = _quantumCyanBrush,
-                StrokeThickness = 1.8,
-                Opacity = 0.0,
-                IsHitTestVisible = false
-            };
-            CosmicSphereCanvas.Children.Add(ring);
-            _listeningWaves.Add(ring);
-        }
-
-        for (int s = 0; s < SynapseCount; s++)
-        {
-            var line = new Line
-            {
-                Stroke = _quantumCyanBrush,
-                StrokeThickness = 0.85,
-                Opacity = 0.0,
-                IsHitTestVisible = false
-            };
-            CosmicSphereCanvas.Children.Add(line);
-            _synapseLines.Add(line);
-        }
-
-        double goldenRatio = (1.0 + Math.Sqrt(5.0)) / 2.0;
-        var rng = new Random(42);
-
-        for (int i = 0; i < StarCount; i++)
-        {
-            double theta = 2.0 * Math.PI * i / goldenRatio;
-            double phi = Math.Acos(1.0 - 2.0 * (i + 0.5) / StarCount);
-
-            double bx = Math.Cos(theta) * Math.Sin(phi);
-            double by = Math.Sin(theta) * Math.Sin(phi);
-            double bz = Math.Cos(phi);
-
-            double size = (i % 9 == 0) ? 5.6 : (i % 3 == 0 ? 4.0 : 2.8);
-            int colorTier = (i % 7 == 0) ? 0 : (i % 3 == 0 ? 1 : 2);
-
-            var dot = new Ellipse
-            {
-                Width = size,
-                Height = size,
-                Fill = colorTier == 0 ? _frostWhiteBrush : (colorTier == 1 ? _quantumCyanBrush : _iceBlueBrush),
-                IsHitTestVisible = false
-            };
-
-            CosmicSphereCanvas.Children.Add(dot);
-            _stars.Add(new StarParticle
-            {
-                BaseX = bx,
-                BaseY = by,
-                BaseZ = bz,
-                BaseSize = size,
-                PhaseOffset = rng.NextDouble() * Math.PI * 2.0,
-                ColorTier = colorTier,
-                Dot = dot
-            });
-        }
+        if (_renderLoopAttached) return;
+        _lastRenderSec = _frameWatch.Elapsed.TotalSeconds;
+        CompositionTarget.Rendering += OnCompositionTargetRendering;
+        _renderLoopAttached = true;
     }
 
-    private void AnimTimer_Tick(object? sender, EventArgs e)
+    private void DetachRenderLoop()
     {
-        _phaseTime += 0.036;
-        double cx = CosmicSphereCanvas.Width * 0.5;
-        double cy = CosmicSphereCanvas.Height * 0.5;
+        if (!_renderLoopAttached) return;
+        CompositionTarget.Rendering -= OnCompositionTargetRendering;
+        _renderLoopAttached = false;
+    }
 
-        bool isRedAlert = IsRedAlertActive;
-        bool isListening = !_isMuted && _currentState.Contains("LISTEN");
-        bool isSpeaking = !_isMuted && _currentState.Contains("SPEAK");
-        bool isThinking = !_isMuted && _currentState.Contains("THINK");
+    private void OnCompositionTargetRendering(object? sender, EventArgs e)
+    {
+        double nowSec = _frameWatch.Elapsed.TotalSeconds;
+        double dt = nowSec - _lastRenderSec;
+        if (dt < 0.0155) return;
+        _lastRenderSec = nowSec;
 
-        if (_outerOrbitRotate != null)
-            _outerOrbitRotate.Angle = (_outerOrbitRotate.Angle + (isRedAlert ? 0.65 : (isThinking ? 0.45 : 0.12))) % 360.0;
-        if (_innerOrbitRotate != null)
-            _innerOrbitRotate.Angle = (_innerOrbitRotate.Angle - (isRedAlert ? 0.75 : (isSpeaking ? 0.55 : 0.18))) % 360.0;
+        double liveVoicePeak = _isMuted ? 0.0 : _audioMeter.GetPythonPlaybackPeak();
 
-        double rotSpeed = isRedAlert ? 0.016 : (isThinking ? 0.022 : (isSpeaking ? 0.012 : (isListening ? 0.009 : 0.0045)));
-        _rotY += rotSpeed;
-        _rotX = Math.Sin(_phaseTime * 0.25) * 0.28;
+        CosmicSphere.IsLightLcdTheme = _isLightLcdTheme;
+        CosmicSphere.IsRedAlert = IsRedAlertActive;
+        CosmicSphere.IsMuted = _isMuted;
+        CosmicSphere.SystemState = _currentState;
+        CosmicSphere.TargetRms = _currentRms;
+        CosmicSphere.LiveVoicePeak = liveVoicePeak;
 
-        double targetRadius = 220.0;
-        if (isRedAlert)
+        CosmicSphere.Step(dt);
+
+        if (_leftOpen && liveVoicePeak > 0.005)
         {
-            targetRadius = 224.0 + Math.Sin(_phaseTime * 5.2) * 15.0 + Math.Cos(_phaseTime * 10.4) * 6.0;
-        }
-        else if (isSpeaking)
-        {
-            double beat = Math.Sin(_phaseTime * 3.4) * 24.0 + Math.Sin(_phaseTime * 6.8) * 10.0;
-            double rmsBoost = Math.Clamp(_currentRms * 135.0, 12.0, 75.0);
-            targetRadius = 225.0 + beat + rmsBoost;
-        }
-        else if (isListening)
-        {
-            targetRadius = 215.0 + Math.Sin(_phaseTime * 2.0) * 8.0 + (_currentRms * 45.0);
-        }
-        else if (isThinking)
-        {
-            targetRadius = 205.0 + Math.Sin(_phaseTime * 4.5) * 12.0;
+            TxtRmsValue.Text = liveVoicePeak.ToString("0.000");
         }
 
-        _currentRadius += (targetRadius - _currentRadius) * 0.18;
-
-        for (int w = 0; w < _listeningWaves.Count; w++)
+        var nowLocal = DateTime.Now;
+        if (nowLocal.Second != _lastClockSecond)
         {
-            var ring = _listeningWaves[w];
-            if (isRedAlert || isListening || isSpeaking)
-            {
-                double waveSpeed = isRedAlert ? 0.60 : 0.45;
-                double waveProgress = ((_phaseTime * waveSpeed) + (w * 0.33)) % 1.0;
-                double waveRadius = _currentRadius * (0.85 + waveProgress * 0.75);
-                double diameter = waveRadius * 2.0;
-                ring.Width = diameter;
-                ring.Height = diameter;
-                Canvas.SetLeft(ring, cx - waveRadius);
-                Canvas.SetTop(ring, cy - waveRadius);
-
-                if (isRedAlert)
-                {
-                    double alertAlpha = _isLightLcdTheme ? 0.90 : 0.70;
-                    ring.Opacity = (1.0 - waveProgress) * alertAlpha;
-                    ring.Stroke = _isLightLcdTheme ? _crimsonDeepBrush : _crimsonCoreBrush;
-                    ring.StrokeThickness = _isLightLcdTheme ? 2.6 : 2.2;
-                }
-                else
-                {
-                    double baseWaveAlpha = _isLightLcdTheme ? 0.85 : (isListening ? 0.55 : 0.30);
-                    ring.Opacity = (1.0 - waveProgress) * baseWaveAlpha;
-                    ring.Stroke = _isLightLcdTheme ? _lcdPitchBlackBrush : (isListening ? _quantumCyanBrush : _iceBlueBrush);
-                    ring.StrokeThickness = _isLightLcdTheme ? 2.4 : 1.8;
-                }
-            }
-            else
-            {
-                ring.Opacity = 0.0;
-            }
+            _lastClockSecond = nowLocal.Second;
+            TxtClock.Text = nowLocal.ToString("HH:mm:ss");
         }
-
-        double cosY = Math.Cos(_rotY), sinY = Math.Sin(_rotY);
-        double cosX = Math.Cos(_rotX), sinX = Math.Sin(_rotX);
-        double lcdScaleBoost = _isLightLcdTheme ? 1.16 : 1.0;
-
-        foreach (var s in _stars)
-        {
-            double localR = _currentRadius;
-
-            if (isRedAlert)
-            {
-                double alertRipple = Math.Sin(s.BaseX * 6.0 + s.BaseY * 6.0 - _phaseTime * 6.5) * 9.0;
-                localR += alertRipple;
-            }
-            else if (isListening)
-            {
-                double ripple = Math.Sin(s.BaseY * 7.0 - _phaseTime * 4.2) * (12.0 + _currentRms * 40.0);
-                localR += ripple;
-            }
-            else if (isSpeaking)
-            {
-                double pulse = Math.Cos(s.BaseX * 5.0 + s.BaseZ * 5.0 + _phaseTime * 5.0) * (10.0 + _currentRms * 50.0);
-                localR += pulse;
-            }
-
-            double x = s.BaseX * localR;
-            double y = s.BaseY * localR;
-            double z = s.BaseZ * localR;
-
-            double rx = x * cosY - z * sinY;
-            double rz1 = x * sinY + z * cosY;
-            double ry = y * cosX - rz1 * sinX;
-            double rz = y * sinX + rz1 * cosX;
-
-            double depth = (rz / (localR + 1.0));
-            double perspective = 520.0 / (520.0 - rz * 0.65);
-
-            double sx = cx + rx * perspective;
-            double sy = cy + ry * perspective;
-
-            s.ScreenX = sx;
-            s.ScreenY = sy;
-            s.Depth = depth;
-
-            double twinkle = 0.88 + 0.12 * Math.Sin(_phaseTime * (isRedAlert ? 5.5 : 2.2) + s.PhaseOffset);
-            double minAlpha = isRedAlert ? 0.30 : (_isLightLcdTheme ? 0.25 : 0.08);
-            double alphaBoost = isRedAlert ? 0.68 : (_isLightLcdTheme ? 0.62 : 0.46);
-            double alpha = Math.Clamp(((depth + 1.18) * alphaBoost) * twinkle, minAlpha, 1.0);
-
-            double dotScale = Math.Clamp((depth + 1.55) * 0.58, 0.50, 1.55) * lcdScaleBoost;
-            if (isRedAlert)
-            {
-                dotScale *= 1.15;
-            }
-            else if (isSpeaking)
-            {
-                dotScale *= 1.0 + Math.Clamp(_currentRms * 0.45, 0.05, 0.35);
-            }
-
-            s.Dot.Width = s.BaseSize * dotScale;
-            s.Dot.Height = s.BaseSize * dotScale;
-            s.Dot.Opacity = alpha;
-
-            Canvas.SetLeft(s.Dot, sx - s.Dot.Width * 0.5);
-            Canvas.SetTop(s.Dot, sy - s.Dot.Height * 0.5);
-        }
-
-        double depthThreshold = isRedAlert ? 0.04 : 0.12;
-        double alertPulse = isRedAlert ? (0.78 + 0.22 * Math.Sin(_phaseTime * 6.0)) : 1.0;
-
-        for (int i = 0; i < SynapseCount; i++)
-        {
-            var line = _synapseLines[i];
-            var a = _stars[(i * 8) % StarCount];
-            var b = _stars[(i * 8 + 1) % StarCount];
-
-            if (a.Depth > depthThreshold && b.Depth > depthThreshold)
-            {
-                line.X1 = a.ScreenX;
-                line.Y1 = a.ScreenY;
-                line.X2 = b.ScreenX;
-                line.Y2 = b.ScreenY;
-
-                double baseOpacity;
-                if (isRedAlert)
-                {
-                    baseOpacity = (_isLightLcdTheme ? 0.88 : 0.72) * alertPulse;
-                }
-                else
-                {
-                    baseOpacity = _isLightLcdTheme
-                        ? ((isThinking || isSpeaking) ? 0.65 : 0.35)
-                        : ((isThinking || isSpeaking) ? 0.32 : 0.14);
-                }
-
-                line.Opacity = Math.Clamp(Math.Min(a.Depth, b.Depth) * baseOpacity, 0.0, 1.0);
-            }
-            else
-            {
-                line.Opacity = 0.0;
-            }
-        }
-
-        TxtClock.Text = DateTime.Now.ToString("HH:mm:ss");
     }
 
     // ==================== SLIDE-OUT DRAWER ANIMATIONS ====================
 
-    private void AnimateDrawer(TranslateTransform transform, DependencyProperty prop, double toValue)
+    private void AnimateDrawer(Border drawer, TranslateTransform transform, DependencyProperty prop, double toValue, bool opening)
     {
+        if (opening)
+        {
+            drawer.Visibility = Visibility.Visible;
+        }
+
         var anim = new DoubleAnimation
         {
             To = toValue,
-            Duration = TimeSpan.FromMilliseconds(300),
+            Duration = TimeSpan.FromMilliseconds(280),
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
         };
+
+        if (!opening)
+        {
+            anim.Completed += (_, _) =>
+            {
+                if ((drawer == LeftDrawer && !_leftOpen) ||
+                    (drawer == RightDrawer && !_rightOpen) ||
+                    (drawer == BottomDrawer && !_bottomOpen))
+                {
+                    drawer.Visibility = Visibility.Collapsed;
+                }
+            };
+        }
+
         transform.BeginAnimation(prop, anim);
     }
 
     private void BtnToggleLeftDrawer_Click(object sender, RoutedEventArgs e)
     {
         _leftOpen = !_leftOpen;
-        AnimateDrawer(LeftDrawerTransform, TranslateTransform.XProperty, _leftOpen ? 0 : -410);
+        AnimateDrawer(LeftDrawer, LeftDrawerTransform, TranslateTransform.XProperty, _leftOpen ? 0 : -440, _leftOpen);
         BtnLeftHandle.Visibility = _leftOpen ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void BtnToggleRightDrawer_Click(object sender, RoutedEventArgs e)
     {
         _rightOpen = !_rightOpen;
-        AnimateDrawer(RightDrawerTransform, TranslateTransform.XProperty, _rightOpen ? 0 : 560);
+        AnimateDrawer(RightDrawer, RightDrawerTransform, TranslateTransform.XProperty, _rightOpen ? 0 : 560, _rightOpen);
         BtnRightHandle.Visibility = _rightOpen ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void BtnToggleBottomDrawer_Click(object sender, RoutedEventArgs e)
     {
         _bottomOpen = !_bottomOpen;
-        AnimateDrawer(BottomDrawerTransform, TranslateTransform.YProperty, _bottomOpen ? 0 : 400);
+        AnimateDrawer(BottomDrawer, BottomDrawerTransform, TranslateTransform.YProperty, _bottomOpen ? 0 : 400, _bottomOpen);
         BtnBottomHandle.Visibility = _bottomOpen ? Visibility.Collapsed : Visibility.Visible;
     }
 
@@ -923,8 +678,10 @@ public partial class MainWindow : Window
         var status = await _client.GetStatusAsync();
         if (status != null)
         {
+            bool wsRecentlyActive = _client.IsWsConnected && (DateTime.UtcNow - _lastWsHudUpdateUtc).TotalSeconds < 2.2;
+            string effectiveState = wsRecentlyActive ? _currentState : status.State;
             ApplySystemStatus(
-                status.State,
+                effectiveState,
                 status.ModelLoaded,
                 status.ModelName,
                 status.LumiaConnected,
@@ -955,17 +712,30 @@ public partial class MainWindow : Window
     {
         Dispatcher.InvokeAsync(() =>
         {
+            _lastWsHudUpdateUtc = DateTime.UtcNow;
             _currentRms = Math.Clamp(msg.Rms, 0.0, 1.0);
             TxtRmsValue.Text = _currentRms.ToString("0.000");
 
             ApplySystemStatus(
                 msg.State,
                 msg.ModelLoaded,
-                "Qwen 3.5 9B",
+                _currentModelName,
                 msg.LumiaConnected,
                 msg.Muted,
                 msg.ActiveMic,
                 _client.PairingPin);
+
+
+
+            if (msg.Telemetry.HasValue && msg.Telemetry.Value.ValueKind == JsonValueKind.Object)
+            {
+                try
+                {
+                    var wsTelemetry = JsonSerializer.Deserialize<TelemetryModel>(msg.Telemetry.Value.GetRawText(), TelemetryJsonOpts);
+                    if (wsTelemetry != null) ApplyTelemetry(wsTelemetry);
+                }
+                catch { }
+            }
 
             var lastText = msg.ExtractLastMessageText();
             if (!string.IsNullOrWhiteSpace(lastText) && lastText != _lastSeenWsMessage && lastText != "wake_trigger")
@@ -987,6 +757,10 @@ public partial class MainWindow : Window
     {
         _currentState = string.IsNullOrWhiteSpace(state) ? "IDLE" : state.ToUpperInvariant();
         _isMuted = muted;
+        _currentModelLoaded = modelLoaded;
+        if (!string.IsNullOrWhiteSpace(modelName)) _currentModelName = modelName;
+        _currentLumiaConnected = lumiaConnected;
+        if (!string.IsNullOrWhiteSpace(activeMic)) _currentActiveMic = activeMic;
 
         bool isRedAlert = IsRedAlertActive;
         TxtSystemState.Text = isRedAlert ? "AWAITING AUTH" : (_isMuted ? "MUTED" : _currentState);
@@ -1059,7 +833,43 @@ public partial class MainWindow : Window
         TxtCpuPercent.Text = $"{t.CpuPercent:0.0}%";
 
         BarGpuLoad.Value = Math.Clamp(t.GpuPercent, 0, 100);
-        TxtGpuPercent.Text = $"{t.GpuPercent:0.0}% | {t.GpuTempC:0}°C";
+        TxtGpuPercent.Text = $"{t.GpuPercent:0.0}% | {t.GpuTempC:0}\u00B0C";
+
+        // Thermal Matrix Card
+        double gpuTemp = Math.Clamp(t.GpuTempC, 0, 110);
+        TxtGpuTempBig.Text = $"{gpuTemp:0}\u00B0C";
+        BarGpuTemp.Value = Math.Clamp(gpuTemp, 20, 95);
+
+        if (t.CpuTempC.HasValue && t.CpuTempC.Value > 0)
+        {
+            TxtSecondTempLabel.Text = "CPU PACKAGE TEMP";
+            TxtSecondTempValue.Text = $"{t.CpuTempC.Value:0}\u00B0C";
+        }
+        else
+        {
+            TxtSecondTempLabel.Text = "THROTTLE HEADROOM";
+            double headroom = Math.Max(0, 83.0 - gpuTemp);
+            TxtSecondTempValue.Text = $"+{headroom:0}\u00B0C";
+        }
+
+        if (gpuTemp >= 78)
+        {
+            TxtThermalStatus.Text = "HOT";
+            TxtThermalStatus.Foreground = _crimsonCoreBrush;
+            TxtGpuTempBig.Foreground = _crimsonCoreBrush;
+        }
+        else if (gpuTemp >= 65)
+        {
+            TxtThermalStatus.Text = "WARM";
+            TxtThermalStatus.Foreground = _amberGlitchBrush;
+            TxtGpuTempBig.Foreground = _amberGlitchBrush;
+        }
+        else
+        {
+            TxtThermalStatus.Text = "OPTIMAL";
+            TxtThermalStatus.Foreground = (Brush)FindResource("ActiveGreenBrush");
+            TxtGpuTempBig.Foreground = _isLightLcdTheme ? _lcdPitchBlackBrush : _quantumCyanBrush;
+        }
 
         double vramTotal = t.VramTotalMb > 0 ? t.VramTotalMb : 10240;
         BarVramUsage.Maximum = vramTotal;
@@ -1094,18 +904,21 @@ public partial class MainWindow : Window
 
         if (wasRedAlert != IsRedAlertActive)
         {
-            UpdateSphereThemeBrushes();
-            ApplySystemStatus(_currentState, true, "Qwen 3.5 9B", false, _isMuted, "local", TxtPairingPin.Text);
+            HandleWsConnectionState(_client.IsWsConnected);
+        UpdateSphereThemeBrushes();
+            ApplySystemStatus(_currentState, _currentModelLoaded, _currentModelName, _currentLumiaConnected, _isMuted, _currentActiveMic, TxtPairingPin.Text);
         }
     }
 
     private void AppendChatMessage(string sender, string content)
     {
+        bool isUser = string.Equals(sender, "USER", StringComparison.OrdinalIgnoreCase);
         _chatMessages.Add(new ChatDisplayItem
         {
             SenderLabel = sender,
             Content = content,
-            Timestamp = DateTime.Now.ToString("HH:mm:ss")
+            Timestamp = DateTime.Now.ToString("HH:mm:ss"),
+            IsUser = isUser
         });
         if (LstConversation.Items.Count > 0)
         {
@@ -1119,16 +932,15 @@ public partial class MainWindow : Window
         if (history.Count > 0)
         {
             _chatMessages.Clear();
-            foreach (var item in history.TakeLast(30))
+            foreach (var item in history.OrderBy(h => h.Id).TakeLast(30))
             {
-                string label = string.Equals(item.Role, "user", StringComparison.OrdinalIgnoreCase)
-                    ? "USER"
-                    : "C.E.L.E.S.T.E.";
+                bool isUser = string.Equals(item.Role, "user", StringComparison.OrdinalIgnoreCase);
                 _chatMessages.Add(new ChatDisplayItem
                 {
-                    SenderLabel = label,
+                    SenderLabel = isUser ? "USER" : "C.E.L.E.S.T.E.",
                     Content = item.Content,
-                    Timestamp = item.Timestamp
+                    Timestamp = item.Timestamp,
+                    IsUser = isUser
                 });
             }
             if (LstConversation.Items.Count > 0)
@@ -1208,8 +1020,9 @@ public partial class MainWindow : Window
         {
             _testRedAlertMode = false;
             SecurityBanner.Visibility = Visibility.Collapsed;
-            UpdateSphereThemeBrushes();
-            ApplySystemStatus(_currentState, true, "Qwen 3.5 9B", false, _isMuted, "local", TxtPairingPin.Text);
+            HandleWsConnectionState(_client.IsWsConnected);
+        UpdateSphereThemeBrushes();
+            ApplySystemStatus(_currentState, _currentModelLoaded, _currentModelName, _currentLumiaConnected, _isMuted, _currentActiveMic, TxtPairingPin.Text);
             return;
         }
         if (string.IsNullOrWhiteSpace(_activePendingActionId)) return;
@@ -1226,8 +1039,9 @@ public partial class MainWindow : Window
         {
             _testRedAlertMode = false;
             SecurityBanner.Visibility = Visibility.Collapsed;
-            UpdateSphereThemeBrushes();
-            ApplySystemStatus(_currentState, true, "Qwen 3.5 9B", false, _isMuted, "local", TxtPairingPin.Text);
+            HandleWsConnectionState(_client.IsWsConnected);
+        UpdateSphereThemeBrushes();
+            ApplySystemStatus(_currentState, _currentModelLoaded, _currentModelName, _currentLumiaConnected, _isMuted, _currentActiveMic, TxtPairingPin.Text);
             return;
         }
         if (string.IsNullOrWhiteSpace(_activePendingActionId)) return;

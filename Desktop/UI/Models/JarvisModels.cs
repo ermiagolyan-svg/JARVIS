@@ -65,6 +65,9 @@ public class TelemetryModel
     [JsonPropertyName("gpu_temp_c")]
     public double GpuTempC { get; set; }
 
+    [JsonPropertyName("cpu_temp_c")]
+    public double? CpuTempC { get; set; }
+
     [JsonPropertyName("ram_used_gb")]
     public double RamUsedGb { get; set; }
 
