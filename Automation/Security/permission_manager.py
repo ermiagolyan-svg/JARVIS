@@ -1,6 +1,6 @@
 # JARVIS 4-Tier Security & Permission Layer
 # Manages command execution based on risk levels: SAFE, MODERATE, SENSITIVE, DANGEROUS.
-# All actions are logged to SQLite (security_audit table) and Logs/security_audit.log.
+# All actions are logged to SQLite (security_audit table) and unified central logger.
 
 import os
 import sys
@@ -23,20 +23,7 @@ _PENDING_TIMEOUT_SECONDS = 60
 # ---------------------------------------------------------------------------
 # Logging setup
 # ---------------------------------------------------------------------------
-def _setup_audit_logger() -> logging.Logger:
-    logger = logging.getLogger("security_audit")
-    if not logger.handlers:
-        logger.setLevel(logging.INFO)
-        _AUDIT_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        fh = logging.FileHandler(str(_AUDIT_LOG_FILE), encoding="utf-8")
-        fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-        logger.addHandler(fh)
-        ch = logging.StreamHandler(sys.stdout)
-        ch.setFormatter(logging.Formatter("[SECURITY] %(message)s"))
-        logger.addHandler(ch)
-    return logger
-
-_audit_logger = _setup_audit_logger()
+_audit_logger = logging.getLogger("security_audit")
 
 # ---------------------------------------------------------------------------
 # Database helpers
@@ -68,8 +55,8 @@ def _write_audit_entry(command_type: str, risk_level: str, payload: str, status:
                 (command_type, risk_level, payload, status),
             )
             conn.commit()
-        except sqlite3.OperationalError:
-            pass
+        except sqlite3.OperationalError as exc:
+            _audit_logger.warning("Failed to write security audit entry to DB: %s", exc, exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -263,7 +250,8 @@ class SecurityPermissionManager:
                     (limit,),
                 )
                 return cursor.fetchall()
-            except sqlite3.OperationalError:
+            except sqlite3.OperationalError as exc:
+                _audit_logger.warning("Failed to fetch audit entries: %s", exc, exc_info=True)
                 return []
 
     def get_pending_confirmations(self) -> Dict[str, Tuple[datetime, str]]:

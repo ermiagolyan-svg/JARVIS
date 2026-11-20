@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -21,6 +21,21 @@ public class ChatDisplayItem
     public string SenderLabel { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
     public string Timestamp { get; set; } = string.Empty;
+}
+
+public class LogDisplayItem
+{
+    public LogEntryItem Raw { get; init; } = new();
+    public string ShortTimestamp => Raw.ShortTimestamp;
+    public string Level => Raw.Level;
+    public string ModuleTag => $"[{Raw.Module}]";
+    public string TurnId => Raw.TurnId;
+    public string Message => Raw.Message;
+    public string Traceback => Raw.Traceback;
+    public Visibility TurnVisibility => Raw.HasTurnId ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility TracebackVisibility => Raw.HasTraceback ? Visibility.Visible : Visibility.Collapsed;
+    public Brush LevelBrush { get; init; } = Brushes.DeepSkyBlue;
+    public Brush LevelBadgeBg { get; init; } = Brushes.Transparent;
 }
 
 internal sealed class StarParticle
@@ -46,6 +61,10 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _pollTimer;
     private readonly ObservableCollection<ChatDisplayItem> _chatMessages = new();
     private List<LogEntryItem> _cachedLogs = new();
+    private readonly ObservableCollection<LogDisplayItem> _visibleLogs = new();
+    private readonly HashSet<string> _knownLogModules = new(StringComparer.OrdinalIgnoreCase);
+    private long _lastSeenLogId;
+    private const int MaxClientCachedLogs = 1500;
 
     // Window Maximize (WorkArea) & True FullScreen States
     private Rect _restoreBounds = new(120, 80, 1640, 920);
@@ -105,8 +124,11 @@ public partial class MainWindow : Window
 
         InitializeCosmicSphere();
 
+        LstLogs.ItemsSource = _visibleLogs;
+
         _client = new JarvisBackendClient();
         _client.OnHudUpdate += HandleHudUpdateFromWs;
+        _client.OnLiveLogEntry += HandleLiveLogFromWs;
         _client.OnConnectionStateChanged += HandleWsConnectionState;
         _client.OnClientLog += msg => Dispatcher.InvokeAsync(() => TxtStatusBar.Text = msg);
 
@@ -1421,6 +1443,122 @@ public partial class MainWindow : Window
 
     private async Task RefreshSecurityAuditAsync() => GridSecurityAudit.ItemsSource = await _client.GetSecurityAuditAsync();
 
+    private LogDisplayItem CreateLogDisplayItem(LogEntryItem entry)
+    {
+        string lvl = (entry.Level ?? "INFO").ToUpperInvariant();
+        Brush fg;
+        Brush bg;
+
+        if (lvl is "ERROR" or "CRITICAL" or "FATAL")
+        {
+            fg = _crimsonCoreBrush;
+            bg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#28F43F5E"));
+        }
+        else if (lvl is "WARNING" or "WARN")
+        {
+            fg = _amberGlitchBrush;
+            bg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#26F59E0B"));
+        }
+        else if (lvl == "DEBUG")
+        {
+            fg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#94A3B8"));
+            bg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E94A3B8"));
+        }
+        else
+        {
+            fg = _isLightLcdTheme ? _lcdDarkCobaltBrush : _quantumCyanBrush;
+            bg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1F38BDF8"));
+        }
+
+        return new LogDisplayItem
+        {
+            Raw = entry,
+            LevelBrush = fg,
+            LevelBadgeBg = bg
+        };
+    }
+
+    private void EnsureLogModuleListed(string? moduleName)
+    {
+        if (string.IsNullOrWhiteSpace(moduleName)) return;
+        if (_knownLogModules.Add(moduleName))
+        {
+            CmbLogModule.Items.Add(new ComboBoxItem { Content = moduleName });
+        }
+    }
+
+    private bool MatchesCurrentLogFilters(LogEntryItem entry)
+    {
+        string levelFilter = (CmbLogSeverity.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "ALL";
+        if (!string.Equals(levelFilter, "ALL", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(entry.Level, levelFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string moduleFilter = (CmbLogModule.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "ALL";
+        if (!string.Equals(moduleFilter, "ALL", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(entry.Module, moduleFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string query = (TxtLogSearch?.Text ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            bool hit =
+                (entry.Message?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (entry.Module?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (entry.TurnId?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (entry.Traceback?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false);
+            if (!hit) return false;
+        }
+
+        return true;
+    }
+
+    private void UpdateLogCounter()
+    {
+        if (TxtLogCount != null)
+        {
+            TxtLogCount.Text = $"{_visibleLogs.Count} shown / {_cachedLogs.Count} buffered";
+        }
+    }
+
+    private void HandleLiveLogFromWs(LogEntryItem entry)
+    {
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (ChkLogLive?.IsChecked != true) return;
+            if (entry.Id > 0 && entry.Id <= _lastSeenLogId) return;
+            if (entry.Id > _lastSeenLogId) _lastSeenLogId = entry.Id;
+
+            _cachedLogs.Add(entry);
+            if (_cachedLogs.Count > MaxClientCachedLogs)
+            {
+                _cachedLogs.RemoveRange(0, _cachedLogs.Count - MaxClientCachedLogs);
+            }
+
+            EnsureLogModuleListed(entry.Module);
+
+            if (MatchesCurrentLogFilters(entry))
+            {
+                _visibleLogs.Add(CreateLogDisplayItem(entry));
+                if (_visibleLogs.Count > MaxClientCachedLogs)
+                {
+                    _visibleLogs.RemoveAt(0);
+                }
+
+                if (ChkLogAutoScroll?.IsChecked == true && _visibleLogs.Count > 0)
+                {
+                    LstLogs.ScrollIntoView(_visibleLogs[^1]);
+                }
+            }
+
+            UpdateLogCounter();
+        });
+    }
+
     private async void BtnRefreshLogs_Click(object sender, RoutedEventArgs e) => await RefreshLogsAsync();
 
     private void CmbLogSeverity_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1428,18 +1566,129 @@ public partial class MainWindow : Window
         if (IsLoaded) ApplyLogFilter();
     }
 
+    private void CmbLogModule_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (IsLoaded) ApplyLogFilter();
+    }
+
+    private void TxtLogSearch_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (IsLoaded) ApplyLogFilter();
+    }
+
+    private async void ChkLogLive_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        bool live = ChkLogLive.IsChecked == true;
+        await _client.SetLiveLogsSubscriptionAsync(live, "DEBUG");
+        if (live)
+        {
+            await RefreshLogsAsync();
+        }
+    }
+
+    private void BtnClearLogsView_Click(object sender, RoutedEventArgs e)
+    {
+        _cachedLogs.Clear();
+        _visibleLogs.Clear();
+        TxtLogSearch.Text = string.Empty;
+        UpdateLogCounter();
+    }
+
+    private void BtnCopyLogs_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (LstLogs.SelectedItem is LogDisplayItem sel)
+            {
+                Clipboard.SetText(sel.Raw.FullFormattedLine);
+                TxtStatusBar.Text = "Copied selected log entry to clipboard.";
+                return;
+            }
+            if (_visibleLogs.Count > 0)
+            {
+                var sb = new StringBuilder();
+                foreach (var item in _visibleLogs)
+                {
+                    sb.AppendLine(item.Raw.FullFormattedLine);
+                }
+                Clipboard.SetText(sb.ToString());
+                TxtStatusBar.Text = $"Copied {_visibleLogs.Count} visible log entries to clipboard.";
+            }
+        }
+        catch (Exception ex)
+        {
+            TxtStatusBar.Text = $"Clipboard copy failed: {ex.Message}";
+        }
+    }
+
+    private void MenuCopySelectedLog_Click(object sender, RoutedEventArgs e)
+    {
+        if (LstLogs.SelectedItem is LogDisplayItem sel)
+        {
+            try
+            {
+                Clipboard.SetText(sel.Raw.FullFormattedLine);
+                TxtStatusBar.Text = "Copied selected log entry (+ traceback) to clipboard.";
+            }
+            catch { }
+        }
+    }
+
+    private void MenuFilterTurn_Click(object sender, RoutedEventArgs e)
+    {
+        if (LstLogs.SelectedItem is LogDisplayItem sel && sel.Raw.HasTurnId)
+        {
+            TxtLogSearch.Text = sel.Raw.TurnId;
+        }
+    }
+
+    private void LstLogs_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (LstLogs.SelectedItem is LogDisplayItem sel && sel.Raw.HasTurnId)
+        {
+            TxtLogSearch.Text = string.Equals(TxtLogSearch.Text.Trim(), sel.Raw.TurnId, StringComparison.OrdinalIgnoreCase)
+                ? string.Empty
+                : sel.Raw.TurnId;
+        }
+    }
+
     private async Task RefreshLogsAsync()
     {
-        _cachedLogs = await _client.GetLogsAsync();
+        var resp = await _client.GetLogsStructuredAsync(limit: 500);
+        if (resp != null)
+        {
+            _cachedLogs = resp.Logs ?? new();
+            _lastSeenLogId = Math.Max(_lastSeenLogId, resp.LastId);
+            foreach (var l in _cachedLogs)
+            {
+                EnsureLogModuleListed(l.Module);
+            }
+        }
+
+        var mods = await _client.GetLogModulesAsync();
+        foreach (var m in mods)
+        {
+            EnsureLogModuleListed(m);
+        }
+
         ApplyLogFilter();
     }
 
     private void ApplyLogFilter()
     {
-        string filter = (CmbLogSeverity.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "ALL";
-        var filtered = filter == "ALL"
-            ? _cachedLogs
-            : _cachedLogs.Where(l => string.Equals(l.Level, filter, StringComparison.OrdinalIgnoreCase));
-        LstLogs.ItemsSource = filtered.Select(l => $"[{l.Timestamp}] [{l.Level}] ({l.Module}) {l.Message}").ToList();
+        _visibleLogs.Clear();
+        foreach (var entry in _cachedLogs)
+        {
+            if (MatchesCurrentLogFilters(entry))
+            {
+                _visibleLogs.Add(CreateLogDisplayItem(entry));
+            }
+        }
+        if (ChkLogAutoScroll?.IsChecked == true && _visibleLogs.Count > 0)
+        {
+            LstLogs.ScrollIntoView(_visibleLogs[^1]);
+        }
+        UpdateLogCounter();
     }
 }

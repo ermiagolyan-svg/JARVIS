@@ -5,10 +5,13 @@ and saves Configuration/config.json with automatic default restoration.
 """
 
 import json
+import logging
 import os
 import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 
 # Absolute path to the project root
@@ -193,6 +196,10 @@ class ConfigManager:
 
             except (json.JSONDecodeError, ValueError) as e:
                 # File is corrupted or invalid — restore defaults
+                logger.warning(
+                    f"Config file at {self._config_path} corrupted or invalid ({e}), restoring defaults.",
+                    exc_info=True,
+                )
                 self._config = DEFAULT_CONFIG.copy()
                 self.save()
                 return True
@@ -214,6 +221,7 @@ class ConfigManager:
                 return True
 
             except (IOError, OSError) as e:
+                logger.error(f"Failed to save config to {self._config_path}: {e}", exc_info=True)
                 return False
 
     def get(self, section: str, key: str, default: Any = None) -> Any:

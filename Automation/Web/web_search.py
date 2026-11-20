@@ -1,12 +1,15 @@
 # C.E.L.E.S.T.E. Live Web, Currency & Google Search Engine
 import html
 import json
+import logging
 import re
 import urllib.parse
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 class WebSearchEngine:
@@ -41,7 +44,8 @@ class WebSearchEngine:
             from Core.Config.config_loader import get_config
             self._config = get_config()
             self._config.load()
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to load config in WebSearchEngine: %s", exc, exc_info=True)
             self._config = None
 
     def _get_settings(self) -> Dict[str, Any]:
@@ -92,7 +96,7 @@ class WebSearchEngine:
                 f'1 USD = {try_rate} TRY (لیر ترکیه) | '
                 f'1 USD = {eur_rate} EUR (یورو) | '
                 f'1 EUR = {eur_to_try} TRY | '
-                f'1 USD = {AED_rate if "AED_rate" in locals() else aed_rate} AED (درهم) | '
+                f'1 USD = {aed_rate} AED (درهم) | '
                 f'1 USD = {gbp_rate} GBP (پوند) | '
                 f'1 USD = {cad_rate} CAD | '
                 f'بروزرسانی زنده: {data.get("time_last_update_utc", "Today")}'
@@ -102,7 +106,8 @@ class WebSearchEngine:
                 'snippet': snippet,
                 'url': 'https://open.er-api.com/v6/latest/USD',
             }
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to fetch live FX rates: %s", exc, exc_info=True)
             return None
 
     def search(self, query: str, max_results: Optional[int] = None) -> Dict[str, Any]:
@@ -132,32 +137,32 @@ class WebSearchEngine:
             try:
                 res = self._search_serper(normalized_q, serper_key, limit, proxies)
                 combined.extend(res)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Serper search failed: %s", exc, exc_info=True)
 
         # 2. Google CSE if configured
         if len(combined) < limit and google_key and google_cx:
             try:
                 res = self._search_google_cse(normalized_q, google_key, google_cx, limit, proxies)
                 combined.extend(res)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Google CSE search failed: %s", exc, exc_info=True)
 
         # 3. Zero-key DuckDuckGo HTML
         if len(combined) < limit:
             try:
                 ddg_res = self._search_duckduckgo(normalized_q, limit, proxies)
                 combined.extend(ddg_res)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("DuckDuckGo search failed: %s", exc, exc_info=True)
 
         # 4. Zero-key Google News RSS
         if len(combined) < limit:
             try:
                 gnews_res = self._search_google_news_rss(normalized_q, limit - len(combined), proxies)
                 combined.extend(gnews_res)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Google News RSS search failed: %s", exc, exc_info=True)
 
         return {
             'success': len(combined) > 0,

@@ -25,12 +25,7 @@ from Automation.Web.web_search import WebSearchEngine, get_web_search_engine
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
-_logger = logging.getLogger("automation_router")
-if not _logger.handlers:
-    _logger.setLevel(logging.INFO)
-    ch = logging.StreamHandler(sys.stdout)
-    ch.setFormatter(logging.Formatter("[ROUTER] %(levelname)s: %(message)s"))
-    _logger.addHandler(ch)
+_logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Role definitions (IntEnum for ordering)
@@ -200,7 +195,7 @@ class AutomationRouter:
             elif route_key == "get log":
                 return method()
         except Exception as exc:
-            _logger.error("Execution error (%s): %s", command, exc)
+            _logger.error("Execution error (%s): %s", command, exc, exc_info=True)
             return {"success": False, "error": str(exc)}
         return {"success": True, "result": method()}
 
@@ -259,4 +254,3 @@ if __name__ == "__main__":
     print("\n" + "=" * 70)
     print("Automation Router self-test complete.")
     print("=" * 70)
-

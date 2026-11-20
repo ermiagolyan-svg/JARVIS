@@ -36,9 +36,9 @@ class WakeWordEngine:
             from openwakeword import Model as OWModel
             try:
                 from openwakeword.utils import download_models
-                download_models(model_names=['hey_jarvis'], verbose=False)
-            except Exception:
-                pass
+                download_models(model_names=['hey_jarvis'])
+            except Exception as exc:
+                logger.warning('Failed to download wake-word models automatically: %s', exc, exc_info=True)
             # Windows has no tflite-runtime wheel; use onnxruntime directly
             if sys.platform == 'win32':
                 logger.info('Windows detected: using onnxruntime model format')
@@ -149,7 +149,6 @@ class WakeWordEngine:
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     print('=' * 60)
     print('JARVIS WakeWordEngine - Self Test (Stage 3.3)')
     print('=' * 60)

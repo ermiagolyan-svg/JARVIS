@@ -1,10 +1,13 @@
 '''Memory manager for JARVIS — wraps DatabaseManager and ConfigManager.'''
+import logging
 import os
 import sys
 import sqlite3
 import threading
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Union
+
+logger = logging.getLogger(__name__)
 
 # Ensure project root is in sys.path
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -58,7 +61,8 @@ class MemoryManager:
                 self.retention_days = int(section.get('retention_days', 365))
                 self._settings_loaded = True
                 return True
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Failed to load memory settings from config: {e}", exc_info=True)
                 return False
         return True
 

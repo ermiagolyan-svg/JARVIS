@@ -4,12 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from enum import IntEnum
 
-_logger = logging.getLogger("jarvis.system_control")
-if not _logger.handlers:
-    _h = logging.StreamHandler(sys.stdout)
-    _h.setFormatter(logging.Formatter("[SYS_CTRL] %(message)s"))
-    _logger.addHandler(_h)
-    _logger.setLevel(logging.INFO)
+_logger = logging.getLogger(__name__)
 
 WHITELISTED_PS: List[str] = [
     "Get-Process", "Get-Service", "Get-WmiObject", "Get-CimInstance",
@@ -26,6 +21,7 @@ class SystemControl:
     def __init__(self) -> None:
         self._volume_range = (0, 100)
         self._whitelist = WHITELISTED_PS
+
     def _audio_api(self):
         import comtypes
         from comtypes import CLSCTX_ALL, GUID
@@ -41,52 +37,79 @@ class SystemControl:
                 return devices.EndpointVolume
             else:
                 return devices.Activate(IAudioEndpointVolume._iid_, comtypes.CLSCTX_ALL, None)
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.debug("Primary pycaw AudioUtilities path failed: %s", exc)
         # Fallback: older pycaw pattern: devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
         try:
             from comtypes.gen import devices
             ep = devices.Activate(GUID(IID_ENUM), CLSCTX_ALL, None)
             return ep.QueryInterface(comtypes.GUID(IID_VOL))
-        except (ImportError, AttributeError) as exc:
+        except (ImportError, AttributeError, NameError) as exc:
             raise RuntimeError(f"Audio API init failed: {exc}")
+
     def set_volume(self, level: int) -> Dict[str, Any]:
-        level=max(0,min(100,level))
+        level = max(0, min(100, level))
         try:
-            vol=self._audio_api(); vol.SetMasterVolumeLevelScalar(level/100.0,None)
-            _logger.info("Volume set to %d%%",level); return {"success":True,"volume":level}
+            vol = self._audio_api()
+            vol.SetMasterVolumeLevelScalar(level / 100.0, None)
+            _logger.info("Volume set to %d%%", level)
+            return {"success": True, "volume": level}
         except Exception as exc:
-            _logger.error("Volume control failed: %s",exc); return {"success":False,"error":str(exc)}
+            _logger.error("Volume control failed: %s", exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
+
     def get_volume(self) -> Dict[str, Any]:
         try:
-            vol=self._audio_api(); cur=vol.GetMasterVolumeLevelScalar()
-            return {"success":True,"volume":int(cur*100)}
+            vol = self._audio_api()
+            cur = vol.GetMasterVolumeLevelScalar()
+            return {"success": True, "volume": int(cur * 100)}
         except Exception as exc:
-            _logger.error("Get volume failed: %s",exc); return {"success":False,"error":str(exc)}
+            _logger.error("Get volume failed: %s", exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
+
     def mute_volume(self) -> Dict[str, Any]:
         try:
-            vol=self._audio_api(); muted=vol.GetMute(); vol.SetMute(not bool(muted),None)
-            _logger.info("Mute toggled: %s",not bool(muted)); return {"success":True,"muted":not bool(muted)}
+            vol = self._audio_api()
+            muted = vol.GetMute()
+            vol.SetMute(not bool(muted), None)
+            _logger.info("Mute toggled: %s", not bool(muted))
+            return {"success": True, "muted": not bool(muted)}
         except Exception as exc:
-            _logger.error("Mute failed: %s",exc); return {"success":False,"error":str(exc)}
-    def _media_key(self,vk_code:int,label:str)->Dict[str,Any]:
+            _logger.error("Mute failed: %s", exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
+
+    def _media_key(self, vk_code: int, label: str) -> Dict[str, Any]:
         try:
-            import win32api,win32con
-            win32api.keybd_event(vk_code,0,0,0); win32api.keybd_event(vk_code,0,win32con.KEYEVENTF_KEYUP,0)
-            return {"success":True,"action":label}
-        except ImportError: return {"success":False,"error":"pywin32 not installed"}
-        except Exception as exc: return {"success":False,"error":str(exc)}
-    def media_play_pause(self)->Dict[str,Any]:
-        import win32con; return self._media_key(win32con.VK_MEDIA_PLAY_PAUSE,"play_pause")
-    def toggle_media(self)->Dict[str,Any]:
+            import win32api, win32con
+            win32api.keybd_event(vk_code, 0, 0, 0)
+            win32api.keybd_event(vk_code, 0, win32con.KEYEVENTF_KEYUP, 0)
+            return {"success": True, "action": label}
+        except ImportError:
+            return {"success": False, "error": "pywin32 not installed"}
+        except Exception as exc:
+            _logger.warning("Media key %s failed: %s", label, exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
+
+    def media_play_pause(self) -> Dict[str, Any]:
+        import win32con
+        return self._media_key(win32con.VK_MEDIA_PLAY_PAUSE, "play_pause")
+
+    def toggle_media(self) -> Dict[str, Any]:
         """Alias for media_play_pause (used by router)."""
         return self.media_play_pause()
-    def media_next(self)->Dict[str,Any]:
-        import win32con; return self._media_key(win32con.VK_MEDIA_NEXT_TRACK,"next_track")
-    def media_previous(self)->Dict[str,Any]:
-        import win32con; return self._media_key(win32con.VK_MEDIA_PREV_TRACK,"prev_track")
-    def media_stop(self)->Dict[str,Any]:
-        import win32con; return self._media_key(win32con.VK_MEDIA_STOP,"stop")
+
+    def media_next(self) -> Dict[str, Any]:
+        import win32con
+        return self._media_key(win32con.VK_MEDIA_NEXT_TRACK, "next_track")
+
+    def media_previous(self) -> Dict[str, Any]:
+        import win32con
+        return self._media_key(win32con.VK_MEDIA_PREV_TRACK, "prev_track")
+
+    def media_stop(self) -> Dict[str, Any]:
+        import win32con
+        return self._media_key(win32con.VK_MEDIA_STOP, "stop")
+
     def execute_whitelisted_ps(self, command: str) -> Dict[str, Any]:
         cmd_lower = command.strip().lower()
         is_wl = any(wc.lower() in cmd_lower for wc in self._whitelist)
@@ -108,7 +131,7 @@ class SystemControl:
         except subprocess.TimeoutExpired:
             return {"success": False, "error": "Command timed out"}
         except Exception as exc:
-            _logger.error("PS exec failed: %s", exc)
+            _logger.error("PS exec failed: %s", exc, exc_info=True)
             return {"success": False, "error": str(exc)}
 
     def get_whitelisted_commands(self) -> List[str]:
@@ -159,4 +182,3 @@ if __name__ == "__main__":
     print("\n" + "=" * 70)
     print("System Control self-test complete.")
     print("=" * 70)
-

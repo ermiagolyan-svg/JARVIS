@@ -4,12 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from enum import IntEnum
 
-_logger = logging.getLogger("jarvis.file_manager")
-if not _logger.handlers:
-    _h = logging.StreamHandler(sys.stdout)
-    _h.setFormatter(logging.Formatter("[FILE_MGR] %(message)s"))
-    _logger.addHandler(_h)
-    _logger.setLevel(logging.INFO)
+_logger = logging.getLogger(__name__)
 
 SENSITIVE_PATTERNS: List[Tuple[str, str]] = [
     (r'(?i)(password|passwd|pwd)\s*[=:]\s*\S+', "Password found"),
@@ -51,10 +46,10 @@ class FileManager:
                             return {"success": True, "results": results, "truncated": True}
             return {"success": True, "results": results, "truncated": False}
         except PermissionError as exc:
-            _logger.warning("Search permission denied: %s", exc)
+            _logger.warning("Search permission denied: %s", exc, exc_info=True)
             return {"success": True, "results": results, "error": str(exc)}
         except Exception as exc:
-            _logger.error("Search failed: %s", exc)
+            _logger.error("Search failed: %s", exc, exc_info=True)
             return {"success": False, "error": str(exc)}
 
     def read_file(self, filepath: str) -> Dict[str, Any]:
@@ -69,7 +64,7 @@ class FileManager:
         except PermissionError:
             return {"success": False, "error": f"Permission denied: {filepath}"}
         except Exception as exc:
-            _logger.error("Read failed (%s): %s", filepath, exc)
+            _logger.error("Read failed (%s): %s", filepath, exc, exc_info=True)
             return {"success": False, "error": str(exc)}
 
     def write_file(self, filepath: str, content: str) -> Dict[str, Any]:
@@ -81,7 +76,7 @@ class FileManager:
             self._operation_log.append({"action": "write", "path": str(p), "size": len(content)})
             return {"success": True, "path": str(p)}
         except Exception as exc:
-            _logger.error("Write failed (%s): %s", filepath, exc)
+            _logger.error("Write failed (%s): %s", filepath, exc, exc_info=True)
             return {"success": False, "error": str(exc)}
 
     def delete_file(self, filepath: str) -> Dict[str, Any]:
@@ -96,7 +91,7 @@ class FileManager:
         except PermissionError:
             return {"success": False, "error": f"Permission denied: {filepath}"}
         except Exception as exc:
-            _logger.error("Delete failed (%s): %s", filepath, exc)
+            _logger.error("Delete failed (%s): %s", filepath, exc, exc_info=True)
             return {"success": False, "error": str(exc)}
 
     def list_dir(self, dirpath: str, include_hidden: bool = False) -> Dict[str, Any]:
@@ -113,7 +108,7 @@ class FileManager:
         except PermissionError:
             return {"success": False, "error": f"Permission denied: {dirpath}"}
         except Exception as exc:
-            _logger.error("List failed (%s): %s", dirpath, exc)
+            _logger.error("List failed (%s): %s", dirpath, exc, exc_info=True)
             return {"success": False, "error": str(exc)}
 
     def scan_sensitive(self, filepath: str) -> Dict[str, Any]:
@@ -137,7 +132,7 @@ class FileManager:
         except PermissionError:
             return {"success": False, "error": f"Permission denied: {filepath}"}
         except Exception as exc:
-            _logger.error("Scan failed (%s): %s", filepath, exc)
+            _logger.error("Scan failed (%s): %s", filepath, exc, exc_info=True)
             return {"success": False, "error": str(exc)}
 
     def get_operation_log(self) -> List[Dict[str, Any]]:

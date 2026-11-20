@@ -1,15 +1,23 @@
 # DialogueManager for C.E.L.E.S.T.E. AI Core
-# Features:
-# 1. Persistent SQLite Conversation & Fact Memory across PC reboots.
-# 2. Automatic Fact Extraction (<fact>{...}</fact> and save_fact actions).
-# 3. Live Google/Web Search RAG synthesis (web_search action + automatic online intent detection).
-# 4. Hybrid Cloud AI routing support (Gemini / Claude / ChatGPT / Local Qwen 3.5 9B).
+# Unified Observability: End-to-end stage latency profiling (WebSearch, LLM, Parse, Actions, Followup)
+# with turn_id correlation and explicit error logging.
 
 import json
 import re
+import sys
+import time
+from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 from Automation.automation_router import get_automation_router
+from Core.Logger.logger import get_logger, setup_unified_logging
+
+setup_unified_logging()
+logger = get_logger('dialogue_manager')
 
 
 class DialogueManager:
@@ -36,8 +44,11 @@ class DialogueManager:
 
     ACTION_PATTERN = re.compile(r'<action>(.*?)</action>', re.DOTALL)
     FACT_PATTERN = re.compile(r'<fact>(.*?)</fact>', re.DOTALL)
-    THINK_PATTERN = re.compile(r'<think>.*?</think>', re.DOTALL)
+    THINK_PATTERN = re.compile(r'<(?:think|thought|\|thought\|)>.*?</(?:think|thought|\|thought\|)>', re.DOTALL | re.IGNORECASE)
+    THINK_ORPHAN_CLOSE_PATTERN = re.compile(r'^.*?</(?:think|thought|\|thought\|)>', re.DOTALL | re.IGNORECASE)
+    THINK_UNCLOSED_PATTERN = re.compile(r'<(?:think|thought|\|thought\|)>.*$', re.DOTALL | re.IGNORECASE)
     MAX_HISTORY = 50
+    EMPTY_REPLY_FALLBACK = 'متأسفانه پاسخی از هسته پردازشی دریافت نشد مهندس، لطفاً دوباره بگو.'
 
     ONLINE_SEARCH_TRIGGERS = [
         'سرچ', 'جستجو', 'گوگل', 'اینترنت', 'قیمت', 'نرخ', 'دلار', 'لیر', 'یورو',
@@ -51,10 +62,12 @@ class DialogueManager:
             try:
                 from Core.AI.llm_client import LLMClient
                 llm_client = LLMClient()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning('Auto-init of LLMClient in DialogueManager failed: %s', exc)
         self.llm_client = llm_client
         self.history: List[Dict[str, str]] = []
+        self.last_raw_tts_response: str = ''
+        self._last_saved_facts_count: int = 0
         self._memory_manager = None
         self._web_search = None
         self._load_memory()
@@ -79,21 +92,23 @@ class DialogueManager:
                 for r in rows:
                     role = r.get('role') if isinstance(r, dict) else None
                     content = r.get('content') if isinstance(r, dict) else None
-                    if role in ('user', 'assistant') and content:
-                        self.history.append({'role': role, 'content': content})
-        except Exception:
-            pass
+                    if role in ('user', 'assistant') and content and str(content).strip():
+                        self.history.append({'role': role, 'content': str(content).strip()})
+                logger.debug('Restored %d recent conversation turns from SQLite', len(self.history))
+        except Exception as exc:
+            logger.warning('Failed to restore recent history from SQLite: %s', exc)
 
     def _persist_turn_to_db(self, role: str, content: str):
-        if self._memory_manager is None or not content.strip():
+        if self._memory_manager is None or not content or not str(content).strip():
             return
+        clean = str(content).strip()
         try:
             if hasattr(self._memory_manager, 'add_conversation'):
-                self._memory_manager.add_conversation(role=role, content=content)
+                self._memory_manager.add_conversation(role=role, content=clean)
             elif hasattr(self._memory_manager, 'save_conversation'):
-                self._memory_manager.save_conversation(role=role, content=content)
-        except Exception:
-            pass
+                self._memory_manager.save_conversation(role=role, content=clean)
+        except Exception as exc:
+            logger.warning('Failed to persist %s turn to SQLite: %s', role, exc)
 
     def get_facts(self) -> str:
         if self._memory_manager is None:
@@ -107,7 +122,8 @@ class DialogueManager:
                 if line.startswith('  '):
                     lines.append('- ' + line.strip())
             return '\n'.join(lines)
-        except Exception:
+        except Exception as exc:
+            logger.warning('Failed to fetch facts prompt block: %s', exc)
             return ''
 
     def _build_system_message(self) -> str:
@@ -118,11 +134,14 @@ class DialogueManager:
         return base
 
     def add_message(self, role: str, content: str, persist: bool = True):
-        self.history.append({'role': role, 'content': content})
+        if not content or not str(content).strip():
+            return
+        clean = str(content).strip()
+        self.history.append({'role': role, 'content': clean})
         if len(self.history) > self.MAX_HISTORY:
             self.history = self.history[-self.MAX_HISTORY:]
         if persist:
-            self._persist_turn_to_db(role, content)
+            self._persist_turn_to_db(role, clean)
 
     def get_messages(self) -> List[Dict[str, str]]:
         messages = [{'role': 'system', 'content': self._build_system_message()}]
@@ -133,99 +152,176 @@ class DialogueManager:
         text_low = (user_input or '').lower()
         return any(trigger in text_low for trigger in self.ONLINE_SEARCH_TRIGGERS)
 
+    @classmethod
+    def _strip_thinking_tags(cls, text: str) -> str:
+        if not text:
+            return ''
+        cleaned = cls.THINK_PATTERN.sub('', text)
+        cleaned = cls.THINK_ORPHAN_CLOSE_PATTERN.sub('', cleaned)
+        cleaned = cls.THINK_UNCLOSED_PATTERN.sub('', cleaned)
+        return cleaned.strip()
+
     def _extract_and_save_facts(self, text: str) -> str:
-        matches = self.FACT_PATTERN.findall(text)
+        self._last_saved_facts_count = 0
+        if not text:
+            return ''
+        text_no_think = self._strip_thinking_tags(text)
+        matches = self.FACT_PATTERN.findall(text_no_think)
+        saved_count = 0
         for raw in matches:
             try:
                 data = json.loads(raw.strip())
-                if isinstance(data, dict) and data.get('key') and data.get('value'):
+                if isinstance(data, dict) and data.get('key') and data.get('value') and self._memory_manager is not None:
                     self._memory_manager.set_fact(
                         category=str(data.get('category', 'user')),
                         key=str(data['key']),
                         value=str(data['value']),
                         importance=int(data.get('importance', 7)),
                     )
-            except Exception:
+                    saved_count += 1
+                    logger.info('Auto-saved <fact>: [%s] %s', data.get('category', 'user'), data['key'])
+            except Exception as exc:
+                logger.warning('Malformed <fact> block skipped: %s | raw=%s', exc, raw.strip()[:120])
                 continue
-        cleaned = self.THINK_PATTERN.sub('', text)
-        cleaned = re.sub(r'^.*?</think>', '', cleaned, flags=re.DOTALL)
-        return self.FACT_PATTERN.sub('', cleaned).strip()
+        self._last_saved_facts_count = saved_count
+        return self.FACT_PATTERN.sub('', text_no_think).strip()
 
     def chat(self, user_input: str) -> str:
+        t_turn0 = time.perf_counter()
+        web_ms = 0.0
+        llm_ms = 0.0
+        parse_ms = 0.0
+        actions_ms = 0.0
+        followup_ms = 0.0
+        actions_count = 0
+
         self.add_message('user', user_input, persist=True)
         messages = self.get_messages()
 
-        # Pre-fetch live web search if user explicitly asked to search Google/web
         if self._should_auto_web_search(user_input):
+            t_ws = time.perf_counter()
             try:
                 ws_data = self._get_web_search().search(user_input)
-                if ws_data.get('results'):
+                web_ms = round((time.perf_counter() - t_ws) * 1000.0, 1)
+                results = ws_data.get('results') or []
+                logger.info('Auto web_search completed in %.1fms (results=%d)', web_ms, len(results))
+                if results:
                     context_block = self._get_web_search().format_results_for_prompt(ws_data)
-                    messages[-1]['content'] = user_input + '\n\n[اطلاعات زنده دریافت‌شده از وب:\n' + context_block + '\nبر اساس اطلاعات بالا به فارسی روان و کوتاه پاسخ بده.]'
-            except Exception:
-                pass
+                    messages[-1]['content'] = (
+                        user_input
+                        + '\n\n[اطلاعات زنده دریافت‌شده از وب:\n'
+                        + context_block
+                        + '\nبر اساس اطلاعات بالا به فارسی روان و کوتاه پاسخ بده.]'
+                    )
+            except Exception as exc:
+                web_ms = round((time.perf_counter() - t_ws) * 1000.0, 1)
+                logger.warning('Auto web_search failed after %.1fms: %s', web_ms, exc)
 
         if self.llm_client is None:
             raise RuntimeError('LLMClient not configured.')
 
+        t_llm = time.perf_counter()
         resp = self.llm_client.chat(messages)
+        llm_ms = round((time.perf_counter() - t_llm) * 1000.0, 1)
+
         content = ''
         if resp.get('choices'):
-            content = resp['choices'][0]['message']['content']
-            tool_calls = resp['choices'][0].get('tool_calls', [])
+            msg = resp['choices'][0].get('message') or {}
+            content = msg.get('content') or ''
+            tool_calls = resp['choices'][0].get('tool_calls') or msg.get('tool_calls') or []
             if tool_calls:
                 for tc in tool_calls:
                     args = json.loads(tc['function']['arguments'])
                     result = self._execute_action({'type': tc['function']['name'], 'params': args})
                     content += f'\n[Result: {result}]'
 
-        # 1. Extract and silently store any <fact> blocks into SQLite
+        # 1. Strip thinking blocks & extract <fact> blocks + parse <action> blocks
+        t_parse = time.perf_counter()
         content = self._extract_and_save_facts(content)
-
-        # 2. Extract and execute <action> blocks
+        facts_saved = self._last_saved_facts_count
         actions, remaining_text = self._parse_actions(content)
+        parse_ms = round((time.perf_counter() - t_parse) * 1000.0, 1)
+        actions_count = len(actions)
 
         if actions:
+            t_act = time.perf_counter()
             web_context_results = []
             other_results = []
             for action in actions:
                 act_type = action.get('type', '')
                 try:
+                    logger.info('Executing dialogue <action>: type=%s', act_type)
                     result = self._execute_action(action)
                     if act_type == 'web_search':
                         web_context_results.append(result)
                     elif act_type in ('save_fact', 'memory_store'):
-                        # Silent memory persistence without cluttering spoken TTS output
                         continue
                     else:
                         other_results.append(f'[Action executed: {result}]')
                 except Exception as e:
+                    logger.exception('Dialogue <action> %s failed: %s', act_type, e)
                     other_results.append(f'[Action error: {str(e)}]')
+            actions_ms = round((time.perf_counter() - t_act) * 1000.0, 1)
 
-            # If the LLM triggered a web_search action, synthesize the final grounded answer
             if web_context_results:
                 followup_msgs = list(messages)
-                followup_msgs.append({'role': 'assistant', 'content': remaining_text})
+                if remaining_text:
+                    followup_msgs.append({'role': 'assistant', 'content': remaining_text})
                 followup_msgs.append({
                     'role': 'user',
                     'content': '\n'.join(web_context_results) + '\nاکنون بر اساس این نتایج جستجوی وب، پاسخ نهایی را به فارسی روان و بدون تگ <action> بیان کن.',
                 })
+                t_fu = time.perf_counter()
                 try:
                     second_resp = self.llm_client.chat(followup_msgs)
+                    followup_ms = round((time.perf_counter() - t_fu) * 1000.0, 1)
                     if second_resp.get('choices'):
-                        remaining_text = second_resp['choices'][0]['message']['content']
+                        remaining_text = (second_resp['choices'][0].get('message') or {}).get('content') or ''
                         remaining_text = self._extract_and_save_facts(remaining_text)
                         _, remaining_text = self._parse_actions(remaining_text)
-                except Exception:
-                    remaining_text = remaining_text + '\n' + '\n'.join(web_context_results)
+                except Exception as exc:
+                    followup_ms = round((time.perf_counter() - t_fu) * 1000.0, 1)
+                    logger.warning('Web-search followup LLM pass failed after %.1fms: %s', followup_ms, exc)
+                    remaining_text = (remaining_text + '\n' + '\n'.join(web_context_results)).strip()
 
             if other_results:
                 content = (remaining_text + '\n' + '\n'.join(other_results)).strip()
             else:
                 content = remaining_text
 
-        self.last_raw_tts_response = content
+        content = self._strip_thinking_tags(content)
         display_content = re.sub(r'\[\s*(?:لحن|حس|tone)\s*:[^\]]+\]\s*', '', content, flags=re.IGNORECASE).strip()
+
+        total_ms = round((time.perf_counter() - t_turn0) * 1000.0, 1)
+        provider = getattr(self.llm_client, 'last_used_provider', 'unknown')
+        timings = getattr(self.llm_client, 'last_timings', None) or {}
+
+        if not display_content:
+            logger.warning(
+                'Dialogue Turn Empty | provider=%s | web=%.1fms llm=%.1fms parse=%.1fms total=%.1fms (not persisted)',
+                provider, web_ms, llm_ms, parse_ms, total_ms,
+            )
+            self.last_raw_tts_response = ''
+            return self.EMPTY_REPLY_FALLBACK
+
+        logger.info(
+            'Dialogue Profile | provider=%s | web=%.1fms llm=%.1fms (ttft=%sms eval=%sms %s tok/s) parse=%.1fms actions=%.1fms(%d) followup=%.1fms total=%.1fms | facts=%d reply_chars=%d',
+            provider,
+            web_ms,
+            llm_ms,
+            timings.get('ttft_ms', '?'),
+            timings.get('eval_ms', '?'),
+            timings.get('tok_per_s', '?'),
+            parse_ms,
+            actions_ms,
+            actions_count,
+            followup_ms,
+            total_ms,
+            facts_saved,
+            len(display_content),
+        )
+
+        self.last_raw_tts_response = content
         self.add_message('assistant', display_content, persist=True)
         return display_content
 
@@ -242,8 +338,8 @@ class DialogueManager:
                         'role': 'system',
                         'content': context_block + '\nبر اساس نتایج آنلاین بالا پاسخ بده.',
                     })
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning('Auto web_search in chat_stream failed: %s', exc)
 
         if self.llm_client is None:
             raise RuntimeError('LLMClient not configured.')
@@ -264,12 +360,15 @@ class DialogueManager:
                     if act_type not in ('save_fact', 'memory_store'):
                         results.append(f'[Action executed: {result}]')
                 except Exception as e:
+                    logger.exception('chat_stream action %s failed: %s', act_type, e)
                     results.append(f'[Action error: {str(e)}]')
             full_text = (remaining_text + ('\n' + '\n'.join(results) if results else '')).strip()
         else:
             full_text = remaining_text
 
-        self.add_message('assistant', full_text, persist=True)
+        full_text = self._strip_thinking_tags(full_text)
+        if full_text:
+            self.add_message('assistant', full_text, persist=True)
         yield ''
 
     def _parse_actions(self, text: str):
@@ -280,7 +379,8 @@ class DialogueManager:
                 action = json.loads(match)
                 if isinstance(action, dict) and 'type' in action:
                     actions.append(action)
-            except (json.JSONDecodeError, ValueError):
+            except (json.JSONDecodeError, ValueError) as exc:
+                logger.warning('Invalid JSON inside <action> block: %s', exc)
                 continue
         remaining = self.ACTION_PATTERN.sub('', text).strip()
         return actions, remaining
@@ -385,12 +485,12 @@ if __name__ == '__main__':
     print('=== C.E.L.E.S.T.E. DialogueManager (Auto-Memory + Web Search) Self-Test ===')
     dm = DialogueManager()
     sample = (
-        'چشم مهندس، در حافظه ثبت شد. '
+        '<think>internal reasoning</think>چشم مهندس، در حافظه ثبت شد. '
         '<fact>{"category": "system", "key": "assistant_identity", "value": "C.E.L.E.S.T.E.", "importance": 9}</fact> '
-        '<action>{"type": "web_search", "params": {"query": "Ryzen 7 9700X"}}</action>'
+        '<action>{"type": "web_search", "params": {"query": "Ryzen 7 9700X"}}</action><think>unclosed tail'
     )
     cleaned = dm._extract_and_save_facts(sample)
-    assert '<fact>' not in cleaned
+    assert '<fact>' not in cleaned and '<think>' not in cleaned and 'unclosed tail' not in cleaned
     actions, remaining = dm._parse_actions(cleaned)
     assert len(actions) == 1 and actions[0]['type'] == 'web_search'
-    print('[OK] Auto-Fact SQLite persistence & Web Search action parsing verified.')
+    print('[OK] Auto-Fact SQLite persistence, unclosed <think> stripping & Web Search action parsing verified.')

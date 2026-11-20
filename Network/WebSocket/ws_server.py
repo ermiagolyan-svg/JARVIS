@@ -1,6 +1,8 @@
-# JARVIS Real-Time WebSocket Server - Lumia Audio Streaming & Control
+# JARVIS / C.E.L.E.S.T.E. Real-Time WebSocket Server - Lumia Audio Streaming & Control
 # Mounted on the unified FastAPI app (port 8765) at /ws/lumia and /ws/desktop.
+# Integrated with Unified Central Logger, Turn Correlation, and Opt-in Live Log Streaming.
 
+import asyncio
 import json
 import logging
 import math
@@ -19,31 +21,40 @@ if str(_project_root) not in sys.path:
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 
-_LOG_DIR = Path(__file__).resolve().parent.parent.parent / 'Logs'
+from Core.Logger.logger import (
+    setup_unified_logging,
+    get_logger,
+    new_turn_id,
+    turn_context,
+    get_turn_id,
+    register_log_listener,
+    unregister_log_listener,
+)
+
+setup_unified_logging()
+_logger = get_logger('ws_server')
+
 _HEARTBEAT_TIMEOUT = 25.0
 _LUMIA_PATH = '/ws/lumia'
 _DESKTOP_PATH = '/ws/desktop'
 
-
-def _setup_logger() -> logging.Logger:
-    logger = logging.getLogger('jarvis_ws')
-    if not logger.handlers:
-        logger.setLevel(logging.INFO)
-        _LOG_DIR.mkdir(parents=True, exist_ok=True)
-        fh = logging.FileHandler(str(_LOG_DIR / 'ws_server.log'), encoding='utf-8')
-        fh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
-        logger.addHandler(fh)
-        ch = logging.StreamHandler(sys.stdout)
-        ch.setFormatter(logging.Formatter('[WS] %(message)s'))
-        logger.addHandler(ch)
-    return logger
+_LEVEL_RANK = {
+    'DEBUG': logging.DEBUG,
+    'INFO': logging.INFO,
+    'WARNING': logging.WARNING,
+    'ERROR': logging.ERROR,
+    'CRITICAL': logging.CRITICAL,
+}
 
 
-_logger = _setup_logger()
+def _log_central(level: str, msg: str, exc_info: bool = False) -> None:
+    lvl = (level or 'INFO').lower()
+    fn = getattr(_logger, lvl, _logger.info)
+    fn(msg, exc_info=exc_info)
 
 
 class JarvisWebSocketManager:
-    # Manages /ws/lumia (binary 16kHz PCM + JSON) and /ws/desktop (JSON control/HUD).
+    # Manages /ws/lumia (binary 16kHz PCM + JSON) and /ws/desktop (JSON control/HUD + live logs).
 
     def __init__(
         self,
@@ -54,8 +65,14 @@ class JarvisWebSocketManager:
         self.app = app
         self._voice_orchestrator = voice_orchestrator
         self._auth_manager = auth_manager
+        self._hardware_monitor: Optional[Any] = None
+        self._fallback_dm: Optional[Any] = None
         self._lumia_clients: Dict[str, WebSocket] = {}
         self._desktop_clients: Dict[str, WebSocket] = {}
+        # Opt-in live log subscribers: client_id -> {"min_level_no": int, "loop": AbstractEventLoop}
+        self._log_subscribers: Dict[str, Dict[str, Any]] = {}
+        self._sub_lock = threading.Lock()
+        self._client_ips: Dict[str, str] = {}
         self._last_heartbeat: Dict[str, float] = {}
         self._active_mic: str = 'mic'
         self._muted: bool = False
@@ -79,6 +96,8 @@ class JarvisWebSocketManager:
         if _DESKTOP_PATH not in existing_paths:
             self.app.add_api_websocket_route(_DESKTOP_PATH, self.handle_desktop_connection)
 
+        register_log_listener(self._on_unified_log_entry)
+
     # Aliases for backward compatibility with rest_server wiring
     async def _route_lumia(self, websocket: WebSocket):
         await self.handle_lumia_connection(websocket)
@@ -91,6 +110,35 @@ class JarvisWebSocketManager:
 
     async def _desktop_ws_endpoint(self, websocket: WebSocket):
         await self.handle_desktop_connection(websocket)
+
+    def _on_unified_log_entry(self, entry: Dict[str, Any]) -> None:
+        """Non-blocking fan-out of unified log entries to subscribed /ws/desktop clients."""
+        with self._sub_lock:
+            if not self._log_subscribers:
+                return
+            targets = list(self._log_subscribers.items())
+
+        entry_level_no = int(entry.get('level_no', logging.INFO))
+        payload_str = json.dumps({'type': 'log_entry', 'entry': entry}, ensure_ascii=False)
+
+        for cid, cfg in targets:
+            if entry_level_no < cfg.get('min_level_no', logging.INFO):
+                continue
+            ws = self._desktop_clients.get(cid)
+            loop = cfg.get('loop')
+            if ws is None or loop is None or loop.is_closed():
+                continue
+
+            async def _send_one(target_ws: WebSocket = ws, data_str: str = payload_str) -> None:
+                try:
+                    await target_ws.send_text(data_str)
+                except Exception:
+                    pass
+
+            try:
+                loop.call_soon_threadsafe(asyncio.create_task, _send_one())
+            except Exception:
+                pass
 
     def _get_auth_manager(self):
         if self._auth_manager is not None:
@@ -113,6 +161,94 @@ class JarvisWebSocketManager:
         except Exception:
             pass
         return self._voice_orchestrator
+
+    def _get_dialogue_manager(self):
+        try:
+            from Network.API.rest_server import _get_dialogue_manager as rest_get_dm
+            dm = rest_get_dm()
+            if dm is not None:
+                return dm
+        except Exception:
+            pass
+
+        if self._fallback_dm is None:
+            from Core.Conversation.dialogue_manager import DialogueManager
+            self._fallback_dm = DialogueManager()
+        return self._fallback_dm
+
+    def _get_unified_tts_engine(self):
+        vo = self._get_voice_orchestrator()
+        if vo is not None and getattr(vo, 'tts_engine', None) is not None:
+            return vo.tts_engine
+        try:
+            from Network.API.rest_server import get_shared_tts_engine
+            tts = get_shared_tts_engine(self.app)
+            if tts is not None:
+                return tts
+        except Exception as exc:
+            _logger.warning('Could not resolve shared TTSEngine via rest_server: %s', exc)
+
+        from Voice.TTS.tts_engine import TTSEngine
+        return TTSEngine.get_instance()
+
+    def _get_hardware_monitor(self):
+        if self._hardware_monitor is not None:
+            return self._hardware_monitor
+        try:
+            from Network.API import rest_server as _rs
+            if getattr(_rs, '_hardware_monitor', None) is not None:
+                self._hardware_monitor = _rs._hardware_monitor
+                return self._hardware_monitor
+        except Exception:
+            pass
+        try:
+            from Desktop.Monitoring.hardware_monitor import HardwareMonitor
+            self._hardware_monitor = HardwareMonitor()
+        except Exception:
+            self._hardware_monitor = None
+        return self._hardware_monitor
+
+    def _is_muted_effective(self) -> bool:
+        if self._muted:
+            return True
+        try:
+            from Network.API import rest_server as _rs
+            vcfg = getattr(_rs, '_voice_config', None) or {}
+            return bool(vcfg.get('muted', vcfg.get('mute', False)))
+        except Exception:
+            return False
+
+    def _trigger_tts_async(self, text: str, client_id: str, turn_id: Optional[str] = None) -> None:
+        if not text or not str(text).strip():
+            return
+        if self._client_ips.get(client_id) == 'testclient':
+            return
+        if self._is_muted_effective():
+            _logger.info('Skipping WS TTS playback because voice is muted.')
+            return
+
+        eff_tid = turn_id or get_turn_id()
+
+        def _tts_play():
+            with turn_context(eff_tid if eff_tid != '-' else None, prefix='WS'):
+                try:
+                    tts = self._get_unified_tts_engine()
+                    if tts is None:
+                        _logger.error('Unified TTSEngine unavailable for WebSocket text_command.')
+                        return
+                    if hasattr(tts, 'speak'):
+                        try:
+                            tts.speak(text, blocking=False, turn_id=get_turn_id())
+                        except TypeError:
+                            tts.speak(text, blocking=False)
+                    elif hasattr(tts, 'synthesize_and_play'):
+                        tts.synthesize_and_play(text, blocking=False)
+                    else:
+                        _logger.error('Unified TTSEngine has neither speak() nor synthesize_and_play().')
+                except Exception as exc:
+                    _logger.exception('WebSocket TTS playback error: %s', exc)
+
+        threading.Thread(target=_tts_play, daemon=True, name='WsTTSTrigger').start()
 
     def _validate_connection(
         self,
@@ -166,35 +302,33 @@ class JarvisWebSocketManager:
         return False
 
     def _build_hud_payload(self) -> dict:
-        # Include live hardware telemetry in the HUD
         hw_telemetry = {}
         try:
-            from Desktop.Monitoring.hardware_monitor import HardwareMonitor
-            hm = HardwareMonitor()
-            snap = hm.get_telemetry_snapshot() if hasattr(hm, "get_telemetry_snapshot") else None
+            hm = self._get_hardware_monitor()
+            snap = hm.get_telemetry_snapshot() if (hm is not None and hasattr(hm, 'get_telemetry_snapshot')) else None
             if snap is not None:
                 if isinstance(snap, dict):
                     hw_telemetry = {
-                        "cpu_percent": float(snap.get("cpu_percent", 0)),
-                        "gpu_percent": float(snap.get("gpu_percent", 0)),
-                        "gpu_temp_c": float(snap.get("gpu_temp_c", 0)),
-                        "vram_used_mb": float(snap.get("vram_used_mb", 0)),
-                        "vram_total_mb": float(snap.get("vram_total_mb", 10240)),
-                        "ram_used_gb": float(snap.get("ram_used_gb", 0)),
-                        "ram_total_gb": float(snap.get("ram_total_gb", 32)),
+                        'cpu_percent': float(snap.get('cpu_percent', 0)),
+                        'gpu_percent': float(snap.get('gpu_percent', 0)),
+                        'gpu_temp_c': float(snap.get('gpu_temp_c', 0)),
+                        'vram_used_mb': float(snap.get('vram_used_mb', 0)),
+                        'vram_total_mb': float(snap.get('vram_total_mb', 10240)),
+                        'ram_used_gb': float(snap.get('ram_used_gb', 0)),
+                        'ram_total_gb': float(snap.get('ram_total_gb', 32)),
                     }
                 else:
-                    cpu = getattr(snap, "cpu", None)
-                    gpu = getattr(snap, "gpu", None)
-                    ram = getattr(snap, "ram", None)
+                    cpu = getattr(snap, 'cpu', None)
+                    gpu = getattr(snap, 'gpu', None)
+                    ram = getattr(snap, 'ram', None)
                     hw_telemetry = {
-                        "cpu_percent": float(getattr(cpu, "usage_percent", 0.0) if cpu else 0.0),
-                        "gpu_percent": float(getattr(gpu, "usage_percent", 0.0) if gpu else 0.0),
-                        "gpu_temp_c": float(getattr(gpu, "temp_celsius", 0.0) if gpu else 0.0),
-                        "vram_used_mb": float(getattr(gpu, "vram_used_mb", 0.0) if gpu else 0.0),
-                        "vram_total_mb": float(getattr(gpu, "vram_total_mb", 10240.0) if gpu else 10240.0),
-                        "ram_used_gb": float(getattr(ram, "used_gb", 0.0) if ram else 0.0),
-                        "ram_total_gb": float(getattr(ram, "total_gb", 32.0) if ram else 32.0),
+                        'cpu_percent': float(getattr(cpu, 'usage_percent', 0.0) if cpu else 0.0),
+                        'gpu_percent': float(getattr(gpu, 'usage_percent', 0.0) if gpu else 0.0),
+                        'gpu_temp_c': float(getattr(gpu, 'temp_celsius', 0.0) if gpu else 0.0),
+                        'vram_used_mb': float(getattr(gpu, 'vram_used_mb', 0.0) if gpu else 0.0),
+                        'vram_total_mb': float(getattr(gpu, 'vram_total_mb', 10240.0) if gpu else 10240.0),
+                        'ram_used_gb': float(getattr(ram, 'used_gb', 0.0) if ram else 0.0),
+                        'ram_total_gb': float(getattr(ram, 'total_gb', 32.0) if ram else 32.0),
                     }
         except Exception:
             pass
@@ -217,7 +351,7 @@ class JarvisWebSocketManager:
         }
 
     def get_state(self) -> dict:
-        """Return current ws_manager state for REST API status endpoint."""
+        """Return lightweight ws_manager state for REST API status endpoint and tests."""
         return {
             'state': self._state,
             'model_loaded': self._model_loaded,
@@ -278,9 +412,10 @@ class JarvisWebSocketManager:
         await websocket.accept()
         client_id = str(id(websocket))
         self._lumia_clients[client_id] = websocket
+        self._client_ips[client_id] = client_ip
         self._last_heartbeat[client_id] = time.time()
         self._update_mic_state(True)
-        _logger.info('Lumia client connected: %s', client_id)
+        _logger.info('Lumia client connected: %s (%s)', client_id, client_ip)
 
         try:
             while True:
@@ -325,8 +460,9 @@ class JarvisWebSocketManager:
         await websocket.accept()
         client_id = str(id(websocket))
         self._desktop_clients[client_id] = websocket
+        self._client_ips[client_id] = client_ip
         self._last_heartbeat[client_id] = time.time()
-        _logger.info('Desktop client connected: %s', client_id)
+        _logger.info('Desktop client connected: %s (%s)', client_id, client_ip)
 
         try:
             while True:
@@ -361,6 +497,18 @@ class JarvisWebSocketManager:
             self._telemetry['heartbeats_received'] += 1
             await self.broadcast_hud_update()
 
+        elif cmd == 'subscribe_logs':
+            enabled = bool(payload.get('enabled', data.get('enabled', True)))
+            min_lvl_str = str(payload.get('min_level', data.get('min_level', 'INFO'))).upper()
+            min_lvl_no = _LEVEL_RANK.get(min_lvl_str, logging.INFO)
+            loop = asyncio.get_running_loop()
+            with self._sub_lock:
+                if enabled and client_id in self._desktop_clients:
+                    self._log_subscribers[client_id] = {'min_level_no': min_lvl_no, 'loop': loop}
+                else:
+                    self._log_subscribers.pop(client_id, None)
+            _logger.info('Desktop client %s live log subscription: enabled=%s min_level=%s', client_id, enabled, min_lvl_str)
+
         elif cmd == 'mute_toggle':
             if 'muted' in payload:
                 self._muted = bool(payload['muted'])
@@ -374,13 +522,31 @@ class JarvisWebSocketManager:
                 self._muted = not self._muted
 
             self._state = 'MUTED' if self._muted else 'IDLE'
+
+            try:
+                from Network.API import rest_server as _rs
+                if hasattr(_rs, '_voice_config'):
+                    _rs._voice_config['muted'] = self._muted
+                    _rs._voice_config['mute'] = self._muted
+            except Exception:
+                pass
+
             vo = self._get_voice_orchestrator()
             if vo is not None and hasattr(vo, 'set_muted'):
                 try:
                     vo.set_muted(self._muted)
                 except Exception:
                     pass
-            _logger.info('Mute toggled: %s', self._muted)
+
+            if self._muted and self._client_ips.get(client_id) != 'testclient':
+                try:
+                    tts = self._get_unified_tts_engine()
+                    if tts is not None and hasattr(tts, 'stop_speaking'):
+                        tts.stop_speaking()
+                except Exception as exc:
+                    _logger.warning('Failed to stop active TTS on mute: %s', exc)
+
+            _logger.info('Mute toggled via WS: %s', self._muted)
             await self.broadcast_hud_update()
 
         elif cmd == 'wake_trigger':
@@ -402,28 +568,47 @@ class JarvisWebSocketManager:
         elif cmd == 'text_command':
             text = (payload.get('text') or data.get('text') or '').strip()
             if text:
-                # Call C.E.L.E.S.T.E. DialogueManager for real AI response
-                try:
-                    from Core.Conversation.dialogue_manager import DialogueManager
-                    dm = DialogueManager()
-                    ai_response = dm.chat(text)
-                    self._last_message = {'role': 'assistant', 'text': ai_response}
-                    _logger.info('AI response to text_command: %s', ai_response[:80])
+                tid = new_turn_id('WS')
+                self._state = 'THINKING'
+                with turn_context(tid):
+                    _logger.info('Turn start [WS] | client=%s | chars=%d | text=%s', client_id, len(text), text[:120])
+                    t0 = time.perf_counter()
+                    try:
+                        dm = self._get_dialogue_manager()
 
-                    # Trigger async TTS playback (non-blocking)
-                    def _tts_play():
-                        try:
-                            from Core.Voice.voice_orchestrator import VoiceOrchestrator
-                            vo = VoiceOrchestrator()
-                            if hasattr(vo, "speak"):
-                                vo.speak(ai_response)
-                        except Exception:
-                            pass
-                    threading.Thread(target=_tts_play, daemon=True).start()
+                        def _run_chat_with_turn() -> str:
+                            with turn_context(tid):
+                                return dm.chat(text)
 
-                except Exception as e:
-                    _logger.error('text_command AI failure: %s', e)
-                    self._last_message = {'role': 'assistant', 'text': f'Error: {e}'}
+                        ai_response = await asyncio.to_thread(_run_chat_with_turn)
+                        llm_ms = round((time.perf_counter() - t0) * 1000.0, 1)
+                        ai_response = (ai_response or '').strip()
+
+                        if not ai_response:
+                            _logger.warning('text_command produced empty reply from DialogueManager (llm_ms=%.1fms)', llm_ms)
+                            ai_response = 'متأسفانه پاسخی از هسته پردازشی دریافت نشد مهندس، لطفاً دوباره بگو.'
+                            raw_tts = ''
+                        else:
+                            raw_tts = (getattr(dm, 'last_raw_tts_response', None) or ai_response).strip()
+
+                        self._last_message = {'role': 'assistant', 'text': ai_response, 'turn_id': tid}
+                        self._state = 'MUTED' if self._muted else 'IDLE'
+                        _logger.info(
+                            'Turn LLM done [WS] | llm_ms=%.1fms | reply_chars=%d | tts_dispatched=%s | reply=%s',
+                            llm_ms,
+                            len(ai_response),
+                            bool(raw_tts),
+                            ai_response[:120],
+                        )
+
+                        if raw_tts:
+                            self._trigger_tts_async(raw_tts, client_id, turn_id=tid)
+
+                    except Exception as e:
+                        llm_ms = round((time.perf_counter() - t0) * 1000.0, 1)
+                        self._state = 'MUTED' if self._muted else 'IDLE'
+                        _logger.exception('text_command AI failure after %.1fms: %s', llm_ms, e)
+                        self._last_message = {'role': 'assistant', 'text': f'خطا در ارتباط با هسته پردازشی سلست: {e}', 'turn_id': tid}
             else:
                 self._last_message = {'role': 'user', 'text': text}
             await self.broadcast_hud_update()
@@ -449,7 +634,7 @@ class JarvisWebSocketManager:
             if vo is not None and hasattr(vo, 'ingest_lumia_audio_chunk'):
                 vo.ingest_lumia_audio_chunk(pcm_bytes)
         except Exception as e:
-            _logger.error('Audio chunk processing error: %s', e)
+            _logger.exception('Audio chunk processing error: %s', e)
 
     def _cleanup_client(self, client_id: str, is_lumia: bool):
         if is_lumia:
@@ -458,10 +643,10 @@ class JarvisWebSocketManager:
                 self._update_mic_state(False)
         else:
             self._desktop_clients.pop(client_id, None)
+            with self._sub_lock:
+                self._log_subscribers.pop(client_id, None)
+        self._client_ips.pop(client_id, None)
         self._last_heartbeat.pop(client_id, None)
-
-    def get_state(self) -> dict:
-        return self._build_hud_payload()
 
 
 def _resolve_test_token(app: FastAPI, client: TestClient) -> str:
@@ -581,6 +766,7 @@ def _run_self_test() -> bool:
                 ws.send_text(json.dumps({'type': 'text_command', 'payload': {'text': 'Hello JARVIS'}}))
                 reply = json.loads(ws.receive_text())
                 _check('Desktop text_command -> hud_update', reply.get('type'), 'hud_update')
+                _check('Desktop text_command -> assistant reply', reply.get('last_message', {}).get('text'), 'Salam')
     except Exception as e:
         _check(f'Desktop text_command test ({e})', False, True)
 

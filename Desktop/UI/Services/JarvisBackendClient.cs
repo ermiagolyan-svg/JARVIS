@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -18,6 +18,8 @@ public class JarvisBackendClient : IDisposable
     private string _authToken = string.Empty;
     private string _pairingPin = "------";
     private readonly string _projectRoot;
+    private bool _liveLogsWanted = true;
+    private string _liveLogsMinLevel = "DEBUG";
 
     public string BaseHttpUrl { get; }
     public string BaseWsUrl { get; }
@@ -25,6 +27,7 @@ public class JarvisBackendClient : IDisposable
     public string PairingPin => _pairingPin;
 
     public event Action<HudUpdateMessage>? OnHudUpdate;
+    public event Action<LogEntryItem>? OnLiveLogEntry;
     public event Action<bool>? OnConnectionStateChanged;
     public event Action<string>? OnClientLog;
 
@@ -183,6 +186,11 @@ public class JarvisBackendClient : IDisposable
                 OnConnectionStateChanged?.Invoke(true);
                 OnClientLog?.Invoke("Connected to /ws/desktop");
 
+                if (_liveLogsWanted)
+                {
+                    await SendWsCommandAsync("subscribe_logs", new { enabled = true, min_level = _liveLogsMinLevel }, ct);
+                }
+
                 using var hbCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 var hbTask = HeartbeatLoopAsync(hbCts.Token);
                 await ReceiveLoopAsync(ct);
@@ -230,12 +238,39 @@ public class JarvisBackendClient : IDisposable
             if (result.MessageType == WebSocketMessageType.Text)
             {
                 var json = Encoding.UTF8.GetString(ms.ToArray());
-                var msg = JsonSerializer.Deserialize<HudUpdateMessage>(json, JsonOpts);
-                if (msg != null && msg.Type == "hud_update")
+                try
                 {
-                    OnHudUpdate?.Invoke(msg);
+                    using var doc = JsonDocument.Parse(json);
+                    if (!doc.RootElement.TryGetProperty("type", out var typeEl) || typeEl.ValueKind != JsonValueKind.String)
+                        continue;
+
+                    string msgType = typeEl.GetString() ?? string.Empty;
+                    if (msgType == "hud_update")
+                    {
+                        var hud = JsonSerializer.Deserialize<HudUpdateMessage>(json, JsonOpts);
+                        if (hud != null) OnHudUpdate?.Invoke(hud);
+                    }
+                    else if (msgType == "log_entry")
+                    {
+                        var logPush = JsonSerializer.Deserialize<WsLogPushMessage>(json, JsonOpts);
+                        if (logPush?.Entry != null) OnLiveLogEntry?.Invoke(logPush.Entry);
+                    }
+                }
+                catch
+                {
+                    // Ignore malformed frame
                 }
             }
+        }
+    }
+
+    public async Task SetLiveLogsSubscriptionAsync(bool enabled, string minLevel = "DEBUG")
+    {
+        _liveLogsWanted = enabled;
+        _liveLogsMinLevel = string.IsNullOrWhiteSpace(minLevel) ? "DEBUG" : minLevel.ToUpperInvariant();
+        if (IsWsConnected)
+        {
+            await SendWsCommandAsync("subscribe_logs", new { enabled = _liveLogsWanted, min_level = _liveLogsMinLevel });
         }
     }
 
@@ -417,12 +452,49 @@ public class JarvisBackendClient : IDisposable
 
     public async Task<List<LogEntryItem>> GetLogsAsync()
     {
+        var res = await GetLogsStructuredAsync(limit: 400);
+        return res?.Logs ?? new();
+    }
+
+    public async Task<LogsResponse?> GetLogsStructuredAsync(
+        string? level = null,
+        string? module = null,
+        string? search = null,
+        long sinceId = 0,
+        int limit = 400)
+    {
         try
         {
-            var res = await _http.GetFromJsonAsync<LogsResponse>("/api/v1/logs", JsonOpts);
-            return res?.Logs ?? new();
+            var qs = new List<string> { $"limit={Math.Clamp(limit, 1, 2000)}" };
+            if (!string.IsNullOrWhiteSpace(level) && !string.Equals(level, "ALL", StringComparison.OrdinalIgnoreCase))
+                qs.Add($"level={Uri.EscapeDataString(level)}");
+            if (!string.IsNullOrWhiteSpace(module) && !string.Equals(module, "ALL", StringComparison.OrdinalIgnoreCase))
+                qs.Add($"module={Uri.EscapeDataString(module)}");
+            if (!string.IsNullOrWhiteSpace(search))
+                qs.Add($"search={Uri.EscapeDataString(search)}");
+            if (sinceId > 0)
+                qs.Add($"since_id={sinceId}");
+
+            string url = "/api/v1/logs?" + string.Join("&", qs);
+            return await _http.GetFromJsonAsync<LogsResponse>(url, JsonOpts);
         }
-        catch { return new(); }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<List<string>> GetLogModulesAsync()
+    {
+        try
+        {
+            var res = await _http.GetFromJsonAsync<LogModulesResponse>("/api/v1/logs/modules", JsonOpts);
+            return res?.Modules ?? new();
+        }
+        catch
+        {
+            return new();
+        }
     }
 
     // Windows Startup helper matching Stage 6.2 (HKCU Run Registry)

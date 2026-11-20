@@ -3,8 +3,6 @@ import logging
 import numpy as np
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-
 def generate_test_wav(path, duration_sec=3, freq=440, sample_rate=16000):
     """Generate a WAV file with a sine wave tone for pipeline testing."""
     t = np.linspace(0, duration_sec, int(sample_rate * duration_sec), endpoint=False)

@@ -1,10 +1,13 @@
 # JARVIS Windows Startup Manager
+import logging
 import os
 import sys
 import winreg
 import subprocess
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 _REGISTRY_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 _REGISTRY_VALUE_NAME = "JARVIS_AI_System"
@@ -39,7 +42,7 @@ def register_startup() -> bool:
         winreg.SetValueEx(key, _REGISTRY_VALUE_NAME, 0, winreg.REG_SZ, entry_path)
         winreg.CloseKey(key)
     except OSError as exc:
-        print(f"[startup_manager] Registry write failed: {exc}", file=sys.stderr)
+        logger.error("Registry write failed: %s", exc, exc_info=True)
         return False
 
     try:
@@ -59,13 +62,13 @@ def register_startup() -> bool:
             timeout=15,
         )
         if result.returncode != 0:
-            print(f"[startup_manager] schtasks failed: {result.stderr.strip()}", file=sys.stderr)
+            logger.error("schtasks failed: %s", result.stderr.strip())
             return False
     except subprocess.TimeoutExpired:
-        print("[startup_manager] schtasks timed out", file=sys.stderr)
+        logger.error("schtasks timed out")
         return False
     except OSError as exc:
-        print(f"[startup_manager] schtasks error: {exc}", file=sys.stderr)
+        logger.error("schtasks error: %s", exc, exc_info=True)
         return False
 
     return True
@@ -93,7 +96,8 @@ def is_registered() -> bool:
             timeout=10,
         )
         task_ok = result.returncode == 0 and _TASK_NAME in result.stdout
-    except (subprocess.TimeoutExpired, OSError):
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.debug("schtasks query failed in is_registered: %s", exc)
         task_ok = False
 
     return registry_ok and task_ok
@@ -120,7 +124,8 @@ def unregister_startup() -> bool:
             timeout=10,
         )
         return result.returncode == 0
-    except (subprocess.TimeoutExpired, OSError):
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.warning("schtasks delete failed in unregister_startup: %s", exc, exc_info=True)
         return False
 
 

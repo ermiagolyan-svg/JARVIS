@@ -4,12 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from enum import IntEnum
 
-_logger = logging.getLogger("jarvis.app_manager")
-if not _logger.handlers:
-    _h = logging.StreamHandler(sys.stdout)
-    _h.setFormatter(logging.Formatter("[APP_MGR] %(message)s"))
-    _logger.addHandler(_h)
-    _logger.setLevel(logging.INFO)
+_logger = logging.getLogger(__name__)
 
 # Known application paths for safe launching
 KNOWN_APPS: Dict[str, str] = {
@@ -44,7 +39,7 @@ class AppManager:
             self._launch_log.append({"app": app_name, "pid": proc.pid, "time": time.time()})
             return {"success": True, "pid": proc.pid, "command": " ".join(cmd)}
         except Exception as exc:
-            _logger.error("Launch failed (%s): %s", app_name, exc)
+            _logger.error("Launch failed (%s): %s", app_name, exc, exc_info=True)
             return {"success": False, "error": str(exc)}
 
     def launch_app(self, name: str) -> Dict[str, Any]:
@@ -77,7 +72,7 @@ class AppManager:
         except subprocess.TimeoutExpired:
             return {"success": False, "error": "tasklist timed out"}
         except Exception as exc:
-            _logger.error("Get status failed: %s", exc)
+            _logger.error("Get status failed: %s", exc, exc_info=True)
             return {"success": False, "error": str(exc)}
 
     def get_known_apps(self) -> Dict[str, Any]:
@@ -97,7 +92,7 @@ class AppManager:
         except subprocess.TimeoutExpired:
             return {"success": False, "error": "Close timed out"}
         except Exception as exc:
-            _logger.error("Close failed (%s): %s", app_name, exc)
+            _logger.error("Close failed (%s): %s", app_name, exc, exc_info=True)
             return {"success": False, "error": str(exc)}
 
     def kill(self, app_name: str) -> Dict[str, Any]:
@@ -113,7 +108,7 @@ class AppManager:
         except subprocess.TimeoutExpired:
             return {"success": False, "error": "Kill timed out"}
         except Exception as exc:
-            _logger.error("Kill failed (%s): %s", app_name, exc)
+            _logger.error("Kill failed (%s): %s", app_name, exc, exc_info=True)
             return {"success": False, "error": str(exc)}
 
     def status(self, app_name: str) -> Dict[str, Any]:
@@ -129,6 +124,7 @@ class AppManager:
         except subprocess.TimeoutExpired:
             return {"success": False, "error": "Status check timed out"}
         except Exception as exc:
+            _logger.warning("Status check failed (%s): %s", app_name, exc, exc_info=True)
             return {"success": False, "error": str(exc)}
 
     def list_apps(self) -> List[str]:

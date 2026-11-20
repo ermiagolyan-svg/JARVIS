@@ -18,8 +18,8 @@
         "heartbeat_interval": 10
     },
     "llama_cpp": {
-        "server_binary_path": "llama-server.exe",
-        "server_exe_path": "llama-server.exe",
+        "server_binary_path": "D:/AI/llama.cpp/llama-server.exe",
+        "server_exe_path": "D:/AI/llama.cpp/llama-server.exe",
         "model_gguf_path": "D:/AI/Models/Gemma-4-26B-A4B-IQ4_XS/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
         "target_model_name": "Gemma 4 26B-A4B IT (IQ4_XS)",
         "host": "127.0.0.1",
@@ -35,31 +35,37 @@
         "flash_attn": true,
         "cache_type_k": "q8_0",
         "cache_type_v": "q8_0",
-        "override_tensor_pattern": "blk\\.(1[0-9]|[2-9][0-9])\\.ffn_.*_exps\\.=CPU",
-        "temperature": 0.4,
+        "override_tensor_pattern": "blk\\.([89]|[1-9][0-9])\\..*exps=CPU",
+        "temperature": 0.6,
         "timeout_seconds": 60,
-        "auto_launch_server": true
+        "auto_launch_server": true,
+        "parallel": 1,
+        "load_mode": "none",
+        "jinja": true,
+        "reasoning_budget": 0,
+        "enable_thinking": false,
+        "top_p": 0.95
     },
     "voice": {
-        "engine_mode": "gemini",
+        "engine_mode": "gooya",
         "sample_rate": 24000,
         "online_api_key": "AQ.Ab8RN6IlbejJqeSUnU3qyPqPMec2JdkTtPavWykBTzJAZ_y3lg",
         "gemini_model": "gemini-2.5-flash-preview-tts",
         "gemini_voice_name": "Kore",
         "gooya_model_dir": "Data/Models/gooya",
-        "gooya_reference_audio": "Data/Models/gooya/speaker_reference.wav",
+        "gooya_reference_audio": "C:\\Users\\ermia\\Downloads\\Music\\speaker_reference.wav",
         "gooya_exaggeration": 0.6,
-        "gooya_cfg_weight": 0.5,
+        "gooya_cfg_weight": 0.7000000000000001,
         "gooya_precision": "bf16",
-        "gooya_auto_unload": false,
+        "gooya_auto_unload": true,
         "stt_model_dir": "Data/Models/whisper",
         "stt_force_cpu": true,
         "wake_word": "hey_jarvis",
-        "wake_threshold": 0.5,
-        "dsp_pitch_semitones": -0.3,
+        "wake_threshold": 0.15,
+        "dsp_pitch_semitones": 0.0,
         "dsp_metallic_mix": 0.0,
         "dsp_reverb_mix": 0.0,
-        "pitch_semitones": -0.3
+        "pitch_semitones": 0.0
     },
     "memory": {
         "db_path": "Data/Memory/jarvis_memory.db",
@@ -72,7 +78,7 @@
         "audit_log_path": "Logs/security_audit.log"
     },
     "cloud_ai": {
-        "enabled": true,
+        "enabled": false,
         "default_provider": "gemini",
         "proxy_url": "",
         "gemini_api_key": "AQ.Ab8RN6IlbejJqeSUnU3qyPqPMec2JdkTtPavWykBTzJAZ_y3lg",

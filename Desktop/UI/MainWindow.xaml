@@ -1,4 +1,4 @@
-﻿<Window x:Class="JarvisDesktop.MainWindow"
+<Window x:Class="JarvisDesktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
@@ -700,26 +700,119 @@
                             </Grid>
                         </TabItem>
 
-                        <!-- TAB 5: LIVE LOGS -->
+                        <!-- TAB 5: LIVE UNIFIED LOGS -->
                         <TabItem Header="LOGS">
                             <Grid Margin="4,8,4,4">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
-                                <DockPanel Grid.Row="0" Margin="0,0,0,10">
-                                    <ComboBox x:Name="CmbLogSeverity" Width="125" SelectedIndex="0" SelectionChanged="CmbLogSeverity_SelectionChanged">
+
+                                <!-- Row 0: Severity + Module + Live Stream Toggles -->
+                                <Grid Grid.Row="0" Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="108"/>
+                                        <ColumnDefinition Width="6"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <ComboBox x:Name="CmbLogSeverity" Grid.Column="0" SelectedIndex="0" SelectionChanged="CmbLogSeverity_SelectionChanged" ToolTip="Filter by severity level">
                                         <ComboBoxItem Content="ALL"/>
+                                        <ComboBoxItem Content="DEBUG"/>
                                         <ComboBoxItem Content="INFO"/>
                                         <ComboBoxItem Content="WARNING"/>
                                         <ComboBoxItem Content="ERROR"/>
+                                        <ComboBoxItem Content="CRITICAL"/>
                                     </ComboBox>
-                                    <Button Content="↻ REFRESH LOGS" Style="{StaticResource HoloButtonStyle}" HorizontalAlignment="Right" Padding="12,5" Click="BtnRefreshLogs_Click"/>
-                                </DockPanel>
-                                <Border Grid.Row="1" Background="{DynamicResource GridBgBrush}" BorderBrush="{DynamicResource CyanBorderDimBrush}" BorderThickness="1" CornerRadius="10" Padding="6">
+
+                                    <ComboBox x:Name="CmbLogModule" Grid.Column="2" SelectedIndex="0" SelectionChanged="CmbLogModule_SelectionChanged" ToolTip="Filter by backend module">
+                                        <ComboBoxItem Content="ALL"/>
+                                    </ComboBox>
+
+                                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                                        <CheckBox x:Name="ChkLogLive" Content="LIVE" IsChecked="True" Foreground="{DynamicResource CyanSecondaryBrush}"
+                                                  FontSize="10.5" FontWeight="Bold" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                  Checked="ChkLogLive_Changed" Unchecked="ChkLogLive_Changed"
+                                                  ToolTip="Receive live logs over /ws/desktop"/>
+                                        <CheckBox x:Name="ChkLogAutoScroll" Content="TAIL" IsChecked="True" Foreground="{DynamicResource TextMutedBrush}"
+                                                  FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center"
+                                                  ToolTip="Auto-scroll to newest log entry"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Row 1: Search Box + Refresh / Copy / Clear -->
+                                <Grid Grid.Row="1" Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBox x:Name="TxtLogSearch" Grid.Column="0" Style="{StaticResource HoloTextBoxStyle}"
+                                             FontFamily="Consolas" FontSize="11" Padding="7,4"
+                                             TextChanged="TxtLogSearch_TextChanged"
+                                             ToolTip="Search message, module, turn_id (e.g. REST-xxxx / WS-xxxx), or traceback"/>
+
+                                    <Button Grid.Column="1" Content="↻" Style="{StaticResource HoloButtonStyle}" Margin="6,0,0,0" Padding="9,4"
+                                            Click="BtnRefreshLogs_Click" ToolTip="Reload unified logs from backend ring buffer"/>
+                                    <Button Grid.Column="2" Content="COPY" Style="{StaticResource HoloButtonStyle}" Margin="4,0,0,0" Padding="8,4"
+                                            Click="BtnCopyLogs_Click" ToolTip="Copy selected log (or all visible logs) with tracebacks"/>
+                                    <Button Grid.Column="3" Content="CLR" Style="{StaticResource HoloDangerButtonStyle}" Margin="4,0,0,0" Padding="8,4"
+                                            Click="BtnClearLogsView_Click" ToolTip="Clear local log view &amp; search"/>
+                                </Grid>
+
+                                <!-- Row 2: Rich Color-Coded Structured Log Stream -->
+                                <Border Grid.Row="2" Background="{DynamicResource GridBgBrush}" BorderBrush="{DynamicResource CyanBorderDimBrush}" BorderThickness="1" CornerRadius="10" Padding="4">
                                     <ListBox x:Name="LstLogs" Background="Transparent" BorderThickness="0"
-                                             Foreground="{DynamicResource TextPrimaryBrush}" FontFamily="Consolas" FontSize="11"/>
+                                             Foreground="{DynamicResource TextPrimaryBrush}" FontFamily="Consolas" FontSize="10.8"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                             VirtualizingPanel.IsVirtualizing="True"
+                                             VirtualizingPanel.VirtualizationMode="Recycling"
+                                             MouseDoubleClick="LstLogs_MouseDoubleClick">
+                                        <ListBox.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Copy Selected Entry (+ Traceback)" Click="MenuCopySelectedLog_Click"/>
+                                                <MenuItem Header="Filter by Turn ID" Click="MenuFilterTurn_Click"/>
+                                                <MenuItem Header="Copy All Visible Logs" Click="BtnCopyLogs_Click"/>
+                                            </ContextMenu>
+                                        </ListBox.ContextMenu>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{Binding LevelBrush}" BorderThickness="3,0,0,0"
+                                                        CornerRadius="5" Padding="7,5" Margin="2,0,2,4">
+                                                    <StackPanel>
+                                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                            <TextBlock Text="{Binding ShortTimestamp}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                            <Border Background="{Binding LevelBadgeBg}" CornerRadius="3" Padding="4,1" Margin="0,0,6,0" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding Level}" Foreground="{Binding LevelBrush}" FontSize="9.5" FontWeight="Bold"/>
+                                                            </Border>
+                                                            <TextBlock Text="{Binding ModuleTag}" Foreground="{DynamicResource CyanPrimaryBrush}" FontSize="10.5" FontWeight="Bold" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                            <Border Visibility="{Binding TurnVisibility}" Background="{DynamicResource BgSubtlePillBrush}"
+                                                                    BorderBrush="{DynamicResource CyanBorderDimBrush}" BorderThickness="1" CornerRadius="3" Padding="4,0" Margin="0,0,6,0" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding TurnId}" Foreground="{DynamicResource CyanSecondaryBrush}" FontSize="9.5" FontWeight="SemiBold"/>
+                                                            </Border>
+                                                        </WrapPanel>
+                                                        <TextBlock Text="{Binding Message}" Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap" FontSize="11"/>
+                                                        <Border Visibility="{Binding TracebackVisibility}" Background="#1AF43F5E" BorderBrush="#66F43F5E"
+                                                                BorderThickness="1" CornerRadius="4" Padding="6,4" Margin="0,4,0,0">
+                                                            <TextBlock Text="{Binding Traceback}" Foreground="#FDA4AF" FontFamily="Consolas" FontSize="10" TextWrapping="Wrap"/>
+                                                        </Border>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
                                 </Border>
+
+                                <!-- Row 3: Live Counter Footer -->
+                                <DockPanel Grid.Row="3" Margin="2,6,2,0">
+                                    <TextBlock x:Name="TxtLogCount" Text="0 entries" Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas" FontSize="10.5" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Double-click entry to filter its Turn ID" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Center" Opacity="0.8"/>
+                                </DockPanel>
                             </Grid>
                         </TabItem>
                     </TabControl>

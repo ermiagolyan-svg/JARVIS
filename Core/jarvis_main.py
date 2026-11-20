@@ -5,7 +5,6 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import signal
-import signal
 import argparse
 import ctypes
 import logging
@@ -15,8 +14,15 @@ import uvicorn
 
 from fastapi.testclient import TestClient
 
+# Initialize unified central logging & global uncaught exception hooks FIRST
+from Core.Logger.logger import setup_unified_logging, install_exception_hooks, get_logger
+
+setup_unified_logging()
+install_exception_hooks()
+
 # --- Windows Single-Instance Mutex ---
 _MUTEX_NAME = r"Global\JARVIS_CORE_SINGLE_INSTANCE_MUTEX"
+
 
 def _acquire_single_instance_mutex() -> bool:
     """Acquire a named mutex to prevent duplicate JARVIS instances.
@@ -35,7 +41,6 @@ def _acquire_single_instance_mutex() -> bool:
 
 # --- Module Imports (exact signatures as provided) ---
 from Core.Config.config_loader import ConfigManager
-from Core.Logger.logger import get_logger
 from Core.Memory.memory_manager import MemoryManager
 from Core.ModelManager.llamacpp_manager import LlamaCppManager
 from Voice.STT.stt_engine import STTEngine
@@ -47,7 +52,7 @@ from Network.API.rest_server import create_rest_app
 
 
 class JarvisMasterService:
-    """Main JARVIS service orchestrator for Core/jarvis_main.py (Stage 6.1)."""
+    """Main JARVIS / C.E.L.E.S.T.E. service orchestrator for Core/jarvis_main.py."""
 
     def __init__(self, dry_run: bool = False):
         self._dry_run = dry_run
@@ -55,9 +60,13 @@ class JarvisMasterService:
         self._shutdown_event = threading.Event()
         self._llm_server_thread = None
 
+        # Always initialize unified logger immediately so early failures never crash on None
+        setup_unified_logging()
+        install_exception_hooks()
+        self.logger = get_logger("jarvis_main")
+
         # Core components
         self.config: ConfigManager = None
-        self.logger: logging.Logger = None
         self.memory: MemoryManager = None
         self.llm_manager: LlamaCppManager = None
         self.voice_orchestrator: VoiceOrchestrator = None
@@ -71,14 +80,11 @@ class JarvisMasterService:
     def _init_core(self) -> bool:
         """Step 1: Init ConfigManager, Logger, and MemoryManager."""
         try:
+            self.logger.info("Core initialization started (unified logging + exception hooks active)")
             self.config = ConfigManager.get_instance()
             if not self.config.load():
-                self.logger = get_logger('jarvis_main')
                 self.logger.error("Failed to load configuration")
                 return False
-
-            self.logger = get_logger('jarvis_main')
-            self.logger.info("Core initialization started")
 
             self.memory = MemoryManager()
             if not self.memory.load_settings():
@@ -87,7 +93,7 @@ class JarvisMasterService:
             self.logger.info("Step 1 complete: Core components initialized")
             return True
         except Exception as e:
-            self.logger.error(f"Core initialization failed: {e}")
+            self.logger.exception("Core initialization failed: %s", e)
             return False
 
     # --- Steps 2 & 3: LLM Server with VRAM Protection ---
@@ -122,7 +128,7 @@ class JarvisMasterService:
 
             return True
         except Exception as e:
-            self.logger.error(f"LLM server init failed: {e}")
+            self.logger.exception("LLM server init failed: %s", e)
             return False
 
     # --- Step 4: Verify Model Ready ---
@@ -138,7 +144,7 @@ class JarvisMasterService:
                 return ready
             return True  # dry_run or no server to verify
         except Exception as e:
-            self.logger.error(f"Model verification failed: {e}")
+            self.logger.exception("Model verification failed: %s", e)
             return False
 
     # --- Steps 5, 6, 7: Voice Components ---
@@ -161,7 +167,7 @@ class JarvisMasterService:
             self.voice_orchestrator.tts_engine = self.tts_engine
 
             # CRITICAL: Wire ingest_lumia_audio_chunk if not already defined
-            if not hasattr(self.voice_orchestrator, 'ingest_lumia_audio_chunk'):
+            if not hasattr(self.voice_orchestrator, "ingest_lumia_audio_chunk"):
                 def _ingest_lumia(pcm_bytes):
                     self.wake_word_engine.feed_audio(pcm_bytes)
                 self.voice_orchestrator.ingest_lumia_audio_chunk = _ingest_lumia
@@ -186,19 +192,19 @@ class JarvisMasterService:
 
             return True
         except Exception as e:
-            self.logger.error(f"Voice init failed: {e}")
+            self.logger.exception("Voice init failed: %s", e)
             return False
 
     # --- Step 8: REST API App ---
     def _init_rest_app(self) -> bool:
         """Step 8: Create REST app and attach voice_orchestrator."""
         try:
-            self.app = create_rest_app()
+            self.app = create_rest_app(voice_orchestrator=self.voice_orchestrator)
             self.app.state.voice_orchestrator = self.voice_orchestrator
             self.logger.info("Step 8 complete: REST app created with voice_orchestrator")
             return True
         except Exception as e:
-            self.logger.error(f"REST app init failed: {e}")
+            self.logger.exception("REST app init failed: %s", e)
             return False
 
     # --- Step 9: Ready Report / Uvicorn Startup ---
@@ -206,10 +212,10 @@ class JarvisMasterService:
         """Step 9: Print readiness report (dry_run) or start uvicorn (production)."""
         if self._dry_run:
             self.logger.info("=" * 60)
-            self.logger.info("JARVIS Dry-Run Readiness Report")
+            self.logger.info("C.E.L.E.S.T.E. Dry-Run Readiness Report")
             self.logger.info("=" * 60)
             steps = [
-                ("1. Core", "Config + Logger + Memory"),
+                ("1. Core", "Config + Unified Logger + Memory"),
                 ("2. LLM Server", "VRAM-protected spawn/adopt"),
                 ("3. Model Verify", "verify_model_ready(timeout=10)"),
                 ("4. Voice STT", "STTEngine initialized"),
@@ -220,33 +226,39 @@ class JarvisMasterService:
                 ("9. Health Watchdog", "every 10s (production only)"),
             ]
             for num, desc in steps:
-                self.logger.info(f"  Step {num}: {desc}")
+                self.logger.info("  Step %s: %s", num, desc)
             self.logger.info("=" * 60)
             self.logger.info("DRY-RUN COMPLETE — no server started")
             sys.exit(0)
         else:
-            # Production: print TTS readiness message then start uvicorn server
-            if self.tts_engine and hasattr(self.tts_engine, 'is_ready'):
+            # Production: log TTS readiness message then start uvicorn server
+            if self.tts_engine and hasattr(self.tts_engine, "is_ready"):
                 ready = self.tts_engine.is_ready()
             else:
                 ready = False
             if ready:
-                self.logger.info("سیستم جارویس آماده به کار است")
+                self.logger.info("سیستم سلست آماده به کار است")
             else:
                 self.logger.warning("TTS not yet ready — health watchdog will retry")
 
             # Start the REST API server on port 8765
             host = self.config.get("network", "host", "0.0.0.0")
             port = self.config.get("network", "port", 8765)
-            self.logger.info(f"Starting REST API server on {host}:{port}")
+            self.logger.info("Starting REST API server on %s:%s", host, port)
 
             # Start health watchdog thread BEFORE uvicorn (uvicorn.run is blocking)
-            if hasattr(self, '_health_watchdog') and callable(getattr(self, '_health_watchdog')):
-                watchdog_thread = threading.Thread(target=self._health_watchdog, args=(10,), daemon=True)
+            if hasattr(self, "_health_watchdog") and callable(getattr(self, "_health_watchdog")):
+                watchdog_thread = threading.Thread(
+                    target=self._health_watchdog,
+                    args=(10,),
+                    daemon=True,
+                    name="HealthWatchdog",
+                )
                 watchdog_thread.start()
                 self.logger.info("Health watchdog thread started")
 
-            uvicorn.run(self.app, host=host, port=port, log_level="info")
+            # log_config=None preserves our unified root logger for uvicorn/fastapi
+            uvicorn.run(self.app, host=host, port=port, log_level="info", log_config=None)
 
     # --- Initialize Pipeline ---
     def initialize(self) -> bool:
@@ -267,40 +279,46 @@ class JarvisMasterService:
             self._step9_ready_report()
             return True
         except Exception as e:
-            self.logger.error(f"Initialization pipeline failed: {e}")
+            self.logger.exception("Initialization pipeline failed: %s", e)
             return False
 
     # --- Shutdown / Signal Handlers ---
     def _shutdown_handler(self, signum, frame):
         """Handle SIGINT/SIGTERM for graceful shutdown."""
-        self.logger.info("Shutdown signal received — stopping services...")
+        self.logger.info("Shutdown signal received (sig=%s) — stopping services...", signum)
         self._shutdown_event.set()
 
         if self.voice_orchestrator:
             try:
                 self.voice_orchestrator.stop()
             except Exception as e:
-                self.logger.error(f"Failed to stop voice orchestrator: {e}")
+                self.logger.exception("Failed to stop voice orchestrator: %s", e)
 
-        if self.stt_engine and hasattr(self.stt_engine, 'close'):
+        if self.tts_engine and hasattr(self.tts_engine, "shutdown"):
+            try:
+                self.tts_engine.shutdown()
+            except Exception as e:
+                self.logger.exception("Failed to shutdown TTS engine: %s", e)
+
+        if self.stt_engine and hasattr(self.stt_engine, "close"):
             try:
                 self.stt_engine.close()
             except Exception as e:
-                self.logger.error(f"Failed to close STT engine: {e}")
+                self.logger.exception("Failed to close STT engine: %s", e)
 
         # ONLY stop managed server if WE spawned it
-        if self._spawned_llm and hasattr(self.llm_manager, 'stop_managed_server'):
+        if self._spawned_llm and hasattr(self.llm_manager, "stop_managed_server"):
             try:
                 self.llm_manager.stop_managed_server()
                 self.logger.info("Managed LLM server stopped")
             except Exception as e:
-                self.logger.error(f"Failed to stop managed LLM server: {e}")
+                self.logger.exception("Failed to stop managed LLM server: %s", e)
 
         if self._llm_server_thread and self._llm_server_thread.is_alive():
             self._llm_server_thread.join(timeout=5)
             self.logger.info("LLM server thread joined")
 
-        self.logger.info("JARVIS shutdown complete")
+        self.logger.info("C.E.L.E.S.T.E. shutdown complete")
         sys.exit(0)
 
     # --- Health Watchdog ---
@@ -308,33 +326,33 @@ class JarvisMasterService:
         """Periodic health check every `interval` seconds."""
         while not self._shutdown_event.is_set():
             try:
-                if hasattr(self, 'app') and self.app is not None:
+                if hasattr(self, "app") and self.app is not None:
                     client = TestClient(self.app)
                     resp = client.get("/api/v1/health")
                     if resp.status_code != 200:
-                        self.logger.warning(f"Health check failed: {resp.status_code}")
+                        self.logger.warning("Health check failed: status=%s", resp.status_code)
                 else:
                     self.logger.debug("Health watchdog: app not yet available")
             except Exception as e:
-                self.logger.debug(f"Health watchdog error: {e}")
+                self.logger.warning("Health watchdog error: %s", e)
             self._shutdown_event.wait(interval)
 
     # --- Main Block ---
     def run(self) -> None:
         """Entry point: initialize and start the service."""
         if not _acquire_single_instance_mutex():
-            print("Another JARVIS instance is already running. Exiting.")
+            self.logger.error("Another C.E.L.E.S.T.E. / JARVIS instance is already running. Exiting.")
             sys.exit(1)
 
         try:
             self.initialize()
         except Exception as e:
-            print(f"FATAL: {e}")
+            self.logger.exception("FATAL service error: %s", e)
             sys.exit(1)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="JARVIS MasterService")
+    parser = argparse.ArgumentParser(description="C.E.L.E.S.T.E. MasterService")
     parser.add_argument("--dry-run", action="store_true", help="Run readiness check only")
     args = parser.parse_args()
 

@@ -1,5 +1,5 @@
-﻿# C.E.L.E.S.T.E. / JARVIS Local HTTP REST & WebSocket API Server (Port 8765)
-# Fully synchronized with Desktop/UI/Models/JarvisModels.cs and Documentation/API_CONTRACT.md
+# C.E.L.E.S.T.E. / JARVIS Local HTTP REST & WebSocket API Server (Port 8765)
+# Fully synchronized with Desktop/UI/Models/JarvisModels.cs and Unified Observability Pipeline
 
 import os
 import sys
@@ -17,27 +17,47 @@ _project_root = Path(__file__).resolve().parents[2]
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from fastapi import FastAPI, Request, HTTPException, status
+from fastapi import FastAPI, Request, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field
 
+from Core.Logger.logger import (
+    setup_unified_logging,
+    get_logger,
+    get_recent_logs,
+    get_buffered_modules,
+    get_last_log_id,
+    get_recent_logs_count,
+    new_turn_id,
+    turn_context,
+    get_turn_id,
+)
+
+setup_unified_logging()
+_logger = get_logger("rest_server")
+
 # Hardware Monitor (live telemetry) - safe import with fallback
 try:
     from Desktop.Monitoring.hardware_monitor import HardwareMonitor
-
     _hardware_monitor = HardwareMonitor()
 except ImportError:
     _hardware_monitor = None
 
 
 # ---------------------------------------------------------------------------
-# Paths & State Stores
+# Paths, Unified Logger Helper & State Stores
 # ---------------------------------------------------------------------------
 _CONFIG_DIR = Path(r"D:\AI\JARVIS\Configuration")
 _LOG_DIR = Path(r"D:\AI\JARVIS\Logs")
 _AUTH_TOKEN_FILE = _CONFIG_DIR / "auth_token.json"
-_LOG_FILE = _LOG_DIR / "rest_server.log"
+
+
+def _log_central(level: str, msg: str, exc_info: bool = False) -> None:
+    lvl = (level or "INFO").lower()
+    fn = getattr(_logger, lvl, _logger.info)
+    fn(msg, exc_info=exc_info)
+
 
 _memory_store: Dict[str, Any] = {}
 _facts_fallback_store: Dict[str, Dict[str, Any]] = {}
@@ -114,9 +134,9 @@ _telemetry_data: Dict[str, Any] = {
 _START_TIME: float = time.time()
 _dialogue_manager: Any = None
 _memory_manager: Any = None
-_tts_engine: Any = None
 _nvml_initialized: bool = False
 _live_cpu_percent: float = 3.5
+
 
 def _cpu_sampler_loop() -> None:
     global _live_cpu_percent
@@ -130,24 +150,8 @@ def _cpu_sampler_loop() -> None:
     except Exception:
         pass
 
-threading.Thread(target=_cpu_sampler_loop, daemon=True).start()
 
-
-def _setup_logger() -> logging.Logger:
-    logger = logging.getLogger("rest_server")
-    if not logger.handlers:
-        logger.setLevel(logging.INFO)
-        _LOG_DIR.mkdir(parents=True, exist_ok=True)
-        fh = logging.FileHandler(str(_LOG_FILE), encoding="utf-8")
-        fh.setFormatter(logging.Formatter("%(asctime)s | %(levelname)-7s | rest_server | %(message)s"))
-        logger.addHandler(fh)
-        ch = logging.StreamHandler(sys.stdout)
-        ch.setFormatter(logging.Formatter("[REST] %(message)s"))
-        logger.addHandler(ch)
-    return logger
-
-
-_logger = _setup_logger()
+threading.Thread(target=_cpu_sampler_loop, daemon=True, name="CpuSampler").start()
 
 
 def _now_str() -> str:
@@ -160,7 +164,7 @@ def _telemetry_incr() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Core Singletons (DialogueManager + LLMClient, MemoryManager, TTSEngine)
+# Core Singletons (DialogueManager + LLMClient, MemoryManager, Unified TTSEngine)
 # ---------------------------------------------------------------------------
 def _get_dialogue_manager() -> Any:
     global _dialogue_manager
@@ -171,14 +175,14 @@ def _get_dialogue_manager() -> Any:
             llm = LLMClient()
             _dialogue_manager = DialogueManager(llm_client=llm)
         except Exception as e:
-            _logger.error("Failed to initialize DialogueManager with LLMClient: %s", e)
+            _logger.exception("Failed to initialize DialogueManager with LLMClient: %s", e)
             _dialogue_manager = None
     elif getattr(_dialogue_manager, "llm_client", None) is None:
         try:
             from Core.AI.llm_client import LLMClient
             _dialogue_manager.llm_client = LLMClient()
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.exception("Failed to attach LLMClient to DialogueManager: %s", e)
     return _dialogue_manager
 
 
@@ -194,28 +198,66 @@ def _get_memory_manager() -> Any:
     return _memory_manager
 
 
-def _trigger_tts_async(response_text: str) -> None:
-    if not response_text or _voice_config.get("muted", False):
+def _get_tts_engine(app: Any = None) -> Any:
+    """Resolve the single unified TTSEngine shared across VoiceOrchestrator, REST, and WebSocket."""
+    if app is not None and hasattr(app, "state"):
+        orch = getattr(app.state, "voice_orchestrator", None)
+        if orch is not None and getattr(orch, "tts_engine", None) is not None:
+            return orch.tts_engine
+        cached = getattr(app.state, "tts_engine", None)
+        if cached is not None:
+            return cached
+
+    try:
+        from Voice.voice_orchestrator import VoiceOrchestrator
+        if hasattr(VoiceOrchestrator, "get_instance"):
+            vo = VoiceOrchestrator.get_instance()
+            if vo is not None and getattr(vo, "tts_engine", None) is not None:
+                return vo.tts_engine
+    except Exception:
+        pass
+
+    from Voice.TTS.tts_engine import TTSEngine
+    engine = TTSEngine.get_instance()
+    if app is not None and hasattr(app, "state"):
+        app.state.tts_engine = engine
+    return engine
+
+
+get_shared_tts_engine = _get_tts_engine
+
+
+def _trigger_tts_async(response_text: str, app: Any = None, turn_id: Optional[str] = None) -> None:
+    if not response_text or not str(response_text).strip():
+        return
+    if _voice_config.get("muted", False) or _voice_config.get("mute", False):
+        _logger.info("Skipping REST TTS playback because voice is muted.")
         return
 
-    def _play():
-        global _tts_engine
-        try:
-            if _tts_engine is None:
-                from Voice.TTS.tts_engine import TTSEngine
-                _tts_engine = TTSEngine()
-            if hasattr(_tts_engine, "speak"):
-                _tts_engine.speak(response_text)
-            elif hasattr(_tts_engine, "synthesize_and_play"):
-                _tts_engine.synthesize_and_play(response_text)
-        except Exception:
-            pass
+    eff_tid = turn_id or get_turn_id()
 
-    threading.Thread(target=_play, daemon=True).start()
+    def _play():
+        with turn_context(eff_tid if eff_tid != "-" else None, prefix="REST"):
+            try:
+                tts = _get_tts_engine(app)
+                if tts is None:
+                    _logger.error("Unified TTSEngine is None; cannot play response.")
+                    return
+                if hasattr(tts, "speak"):
+                    try:
+                        tts.speak(response_text, blocking=False, turn_id=get_turn_id())
+                    except TypeError:
+                        tts.speak(response_text, blocking=False)
+                elif hasattr(tts, "synthesize_and_play"):
+                    tts.synthesize_and_play(response_text, blocking=False)
+            except Exception as exc:
+                _logger.exception("TTS playback trigger failed: %s", exc)
+
+    threading.Thread(target=_play, daemon=True, name="RestTTSTrigger").start()
 
 
 # ---------------------------------------------------------------------------
-# Live Hardware Telemetry (psutil + pynvml + Desktop.Monitoring.hardware_monitor)
+# Live Hardware Telemetry
 # ---------------------------------------------------------------------------
 def _get_hardware_telemetry() -> Dict[str, float]:
     cpu_pct = 0.0
@@ -226,7 +268,6 @@ def _get_hardware_telemetry() -> Dict[str, float]:
     vram_used_mb = 0.0
     vram_total_mb = 10240.0
 
-    # 1. Try Desktop.Monitoring.hardware_monitor first
     try:
         from Desktop.Monitoring.hardware_monitor import HardwareMonitor
         hm = HardwareMonitor()
@@ -249,7 +290,6 @@ def _get_hardware_telemetry() -> Dict[str, float]:
     except Exception:
         pass
 
-    # 2. Direct psutil fallback for CPU & DDR5 RAM
     try:
         import psutil
         if cpu_pct <= 0.0:
@@ -260,7 +300,6 @@ def _get_hardware_telemetry() -> Dict[str, float]:
     except Exception:
         pass
 
-    # 3. Direct pynvml / nvidia-smi fallback for RTX 3080 10GB
     if gpu_pct <= 0.0 and vram_used_mb <= 0.0:
         global _nvml_initialized
         try:
@@ -382,7 +421,7 @@ def get_active_pairing_pin() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Pydantic Models (Matching BOTH JarvisModels.cs and Self-Test)
+# Pydantic Models
 # ---------------------------------------------------------------------------
 class PairRequest(BaseModel):
     device_id: Optional[str] = Field(default=None)
@@ -456,6 +495,7 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
     async def lan_middleware(request: Request, call_next):
         client_ip = request.client.host if request.client else "127.0.0.1"
         if not _is_lan_ip(client_ip):
+            _logger.warning("Blocked non-LAN HTTP request from %s to %s", client_ip, request.url.path)
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={"detail": "Access denied: only LAN/IP loopback allowed"},
@@ -496,6 +536,7 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
         token = get_master_token()
         _pairing_pins[dev] = pin
         _telemetry_data["last_pairing"] = dev
+        _logger.info("Device paired via REST: device=%s", dev)
         return {
             "success": True,
             "status": "ok",
@@ -512,7 +553,7 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
             return {"device_id": device_id, "status": "paired", "pin": _pairing_pins[device_id]}
         return {"device_id": device_id, "status": "unpaired"}
 
-    # --- Status (Matches C# SystemStatusModel) ---
+    # --- Status ---
     @app.get("/api/v1/status", tags=["health"])
     async def api_status():
         ws_state = {}
@@ -568,11 +609,10 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
             "pairing_pin": get_active_pairing_pin(),
         }
 
-    # --- Telemetry (Matches C# TelemetryModel) ---
+    # --- Telemetry ---
     @app.get("/api/v1/telemetry", tags=["health"])
     async def api_telemetry():
         _telemetry_incr()
-        # Live hardware telemetry via HardwareMonitor singleton
         snap = None
         if _hardware_monitor is not None:
             try:
@@ -606,7 +646,7 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
             "pending_security_items": len([s for s in _pending_security if s.get("status") == "pending"]),
         }
 
-    # --- Chat (Matches C# ChatRequest / ChatResponse + Real AI DialogueManager) ---
+    # --- Chat (with End-to-End Turn Correlation & Latency Profiling) ---
     @app.post("/api/v1/chat", tags=["chat"])
     async def api_chat(request: Request, body: ChatRequest):
         _telemetry_incr()
@@ -622,28 +662,49 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
                 "session_id": body.session_id or "default",
             }
 
+        tid = new_turn_id("REST")
         is_test_client = (request.client and request.client.host == "testclient")
         reply_text = ""
+        dm = None
+        llm_ms = 0.0
 
-        try:
-            dm = _get_dialogue_manager()
-            if dm is not None and not is_test_client:
-                reply_text = dm.chat(user_message)
-            elif dm is not None and is_test_client:
-                # Fast path for unit self-test so it never blocks waiting for llama-server spinup
-                if dm.llm_client and dm.llm_client.get_health_status():
+        with turn_context(tid):
+            _logger.info(
+                "Turn start [REST] | source=%s | chars=%d | text=%s",
+                body.source or "desktop",
+                len(user_message),
+                user_message[:120],
+            )
+            t0 = time.perf_counter()
+            try:
+                dm = _get_dialogue_manager()
+                if dm is not None and not is_test_client:
                     reply_text = dm.chat(user_message)
+                elif dm is not None and is_test_client:
+                    if dm.llm_client and dm.llm_client.get_health_status():
+                        reply_text = dm.chat(user_message)
+                    else:
+                        reply_text = f"پاسخ تست سلست: {user_message}"
                 else:
-                    reply_text = f"ظ¾ط§ط³ط® طھط³طھ ط³ظ„ط³طھ: {user_message}"
-            else:
-                reply_text = f"ظ¾ط§ط³ط® ط³ظ„ط³طھ: {user_message}"
-        except Exception as e:
-            _logger.error("Chat error: %s", e)
-            reply_text = f"ط®ط·ط§ ط¯ط± ط§ط±طھط¨ط§ط· ط¨ط§ ظ‡ط³طھظ‡ ظ¾ط±ط¯ط§ط²ط´غŒ ط³ظ„ط³طھ: {e}"
+                    reply_text = f"پاسخ تست سلست: {user_message}"
+            except Exception as e:
+                _logger.exception("Chat turn error: %s", e)
+                reply_text = f"خطا در ارتباط با هسته پردازشی سلست: {e}"
+            finally:
+                llm_ms = round((time.perf_counter() - t0) * 1000.0, 1)
 
-        if not is_test_client:
-            raw_tts = getattr(dm, 'last_raw_tts_response', None) or reply_text
-            _trigger_tts_async(raw_tts)
+            tts_dispatched = False
+            if not is_test_client and reply_text:
+                raw_tts = getattr(dm, "last_raw_tts_response", None) or reply_text
+                _trigger_tts_async(raw_tts, app=request.app, turn_id=tid)
+                tts_dispatched = True
+
+            _logger.info(
+                "Turn LLM done [REST] | llm_ms=%.1fms | reply_chars=%d | tts_dispatched=%s",
+                llm_ms,
+                len(reply_text or ""),
+                tts_dispatched,
+            )
 
         return {
             "spoken_response": reply_text,
@@ -653,6 +714,8 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
             "confidence": 0.98,
             "language": "fa",
             "session_id": body.session_id or "default",
+            "turn_id": tid,
+            "llm_ms": llm_ms,
         }
 
     # --- Voice Mute & DSP Config ---
@@ -667,6 +730,7 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
         muted_bool = bool(muted_val)
         _voice_config["mute"] = muted_bool
         _voice_config["muted"] = muted_bool
+        _logger.info("Voice mute updated via REST: muted=%s", muted_bool)
         return {"muted": muted_bool, "mute": muted_bool, "volume": _voice_config["volume"]}
 
     @app.get("/api/v1/voice/config", tags=["voice"])
@@ -687,12 +751,12 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
     @app.post("/api/v1/voice/config", tags=["voice"])
     async def api_voice_config_update(request: Request):
         _telemetry_incr()
+        is_test_client = (request.client and request.client.host == "testclient")
         try:
             data = await request.json()
         except Exception:
             data = {}
 
-        # 1. Normalize engine_mode
         if "engine_mode" in data and data["engine_mode"]:
             raw_mode = str(data["engine_mode"]).lower().strip()
             if raw_mode in ("online", "gemini"):
@@ -744,29 +808,30 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
             _voice_config["muted"] = bool(data["mute"])
             _voice_config["mute"] = bool(data["mute"])
 
-        # 2. Persist to Configuration/config.json via ConfigManager
-        try:
-            from Core.Config.config_loader import get_config
-            cfg_mgr = get_config()
-            cfg_keys = [
-                "engine_mode", "online_api_key", "gemini_model", "gemini_voice_name",
-                "gooya_model_dir", "gooya_reference_audio", "gooya_exaggeration",
-                "gooya_cfg_weight", "gooya_precision", "gooya_auto_unload",
-                "wake_threshold"
-            ]
-            for k in cfg_keys:
-                if k in _voice_config and _voice_config[k] is not None:
-                    cfg_mgr.set("voice", k, _voice_config[k])
+        # Persist to Configuration/config.json via ConfigManager
+        if not is_test_client:
+            try:
+                from Core.Config.config_loader import get_config
+                cfg_mgr = get_config()
+                cfg_keys = [
+                    "engine_mode", "online_api_key", "gemini_model", "gemini_voice_name",
+                    "gooya_model_dir", "gooya_reference_audio", "gooya_exaggeration",
+                    "gooya_cfg_weight", "gooya_precision", "gooya_auto_unload",
+                    "wake_threshold"
+                ]
+                for k in cfg_keys:
+                    if k in _voice_config and _voice_config[k] is not None:
+                        cfg_mgr.set("voice", k, _voice_config[k])
 
-            cfg_mgr.set("voice", "dsp_pitch_semitones", _voice_config["dsp_pitch_semitones"])
-            cfg_mgr.set("voice", "pitch_semitones", _voice_config["pitch_semitones"])
-            cfg_mgr.set("voice", "dsp_metallic_mix", _voice_config["dsp_metallic_mix"])
-            cfg_mgr.set("voice", "dsp_reverb_mix", _voice_config["dsp_reverb_mix"])
-            cfg_mgr.save()
-        except Exception as e:
-            _logger.warning("Could not persist voice config: %s", e)
+                cfg_mgr.set("voice", "dsp_pitch_semitones", _voice_config["dsp_pitch_semitones"])
+                cfg_mgr.set("voice", "pitch_semitones", _voice_config["pitch_semitones"])
+                cfg_mgr.set("voice", "dsp_metallic_mix", _voice_config["dsp_metallic_mix"])
+                cfg_mgr.set("voice", "dsp_reverb_mix", _voice_config["dsp_reverb_mix"])
+                cfg_mgr.save()
+            except Exception as e:
+                _logger.warning("Could not persist voice config: %s", e, exc_info=True)
 
-        # 3. Update CelesteAudioDSP live
+        # Update CelesteAudioDSP live
         try:
             from Voice.AudioDSP.jarvis_dsp import CelesteAudioDSP
             CelesteAudioDSP.set_global_config(
@@ -777,7 +842,7 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
         except Exception as e:
             _logger.warning("Failed to update CelesteAudioDSP: %s", e)
 
-        # 4. Update WakeWordEngine & VoiceOrchestrator live
+        # Update WakeWordEngine & VoiceOrchestrator live
         orch = getattr(request.app.state, "voice_orchestrator", None)
         if orch is not None:
             try:
@@ -792,17 +857,19 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
             except Exception as e:
                 _logger.warning("Failed to apply voice config to orchestrator: %s", e)
 
-        # 5. Update TTSEngine singleton directly (switches gemini <-> gooya and unloads VRAM)
-        try:
-            global _tts_engine
-            if _tts_engine is not None and hasattr(_tts_engine, "update_config"):
-                _tts_engine.update_config(_voice_config)
-            elif orch is not None and hasattr(orch, "tts_engine") and orch.tts_engine is not None:
-                orch.tts_engine.update_config(_voice_config)
-        except Exception as e:
-            _logger.warning("Failed to update TTSEngine config: %s", e)
+        # Update the single unified TTSEngine (triggers Gooya VRAM preload or unload)
+        if not is_test_client:
+            try:
+                tts = _get_tts_engine(request.app)
+                if tts is not None and hasattr(tts, "update_config"):
+                    tts.update_config(dict(_voice_config))
+                _logger.info("Voice config updated via API (engine_mode=%s)", _voice_config.get("engine_mode"))
+            except Exception as e:
+                _logger.exception("Failed to update unified TTSEngine config: %s", e)
 
         return dict(_voice_config)
+
+    # --- Memory History ---
     @app.get("/api/v1/memory/history", tags=["memory"])
     async def api_memory_history():
         _telemetry_incr()
@@ -819,8 +886,8 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
                             "content": str(r.get("content", "")),
                             "timestamp": str(r.get("timestamp", _now_str())),
                         })
-            except Exception:
-                pass
+            except Exception as e:
+                _logger.warning("Failed to load recent conversations from SQLite: %s", e)
 
         if not messages_out:
             dm = _get_dialogue_manager()
@@ -844,11 +911,12 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
         if mm and hasattr(mm, "clear_conversations"):
             try:
                 mm.clear_conversations()
-            except Exception:
-                pass
+            except Exception as e:
+                _logger.warning("Failed to clear conversations in SQLite: %s", e)
+        _logger.info("Conversation history cleared via REST")
         return {"cleared": True, "status": "ok"}
 
-    # --- Memory Facts (SQLite + C# FactItem compatible) ---
+    # --- Memory Facts ---
     @app.get("/api/v1/memory/facts", tags=["memory"])
     async def api_memory_facts(category: Optional[str] = None):
         _telemetry_incr()
@@ -858,7 +926,7 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
             try:
                 facts_list = mm.get_all_facts(category=category) or []
             except Exception as e:
-                _logger.error("Failed to query facts from SQLite: %s", e)
+                _logger.exception("Failed to query facts from SQLite: %s", e)
         return {"facts": facts_list}
 
     @app.post("/api/v1/memory/facts", tags=["memory"])
@@ -878,10 +946,9 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
         try:
             mm.set_fact(category=cat, key=fact_key, value=val_str, importance=imp)
         except Exception as e:
-            _logger.error("Failed to save fact to SQLite: %s", e)
+            _logger.exception("Failed to save fact to SQLite: %s", e)
             raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
-        # Fetch the created/updated fact from SQLite
         all_facts = mm.get_all_facts()
         for f in all_facts:
             if f.get("key") == fact_key.lower():
@@ -909,7 +976,7 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
         try:
             deleted = bool(mm.delete_fact(fact_key))
         except Exception as e:
-            _logger.error("Failed to delete fact from SQLite: %s", e)
+            _logger.exception("Failed to delete fact from SQLite: %s", e)
             raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
         if deleted:
@@ -917,7 +984,7 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
 
         raise HTTPException(status_code=404, detail=f"Fact '{fact_key}' not found")
 
-    # --- Legacy Key-Value Memory CRUD (for self-test) ---
+    # --- Legacy Key-Value Memory CRUD ---
     @app.get("/api/v1/memory/{key}", tags=["memory"])
     async def api_memory_get(key: str):
         _telemetry_incr()
@@ -941,7 +1008,7 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
         item = _memory_store.pop(key)
         return {"deleted": True, "item": item}
 
-    # --- Security Pending & Audit (Matches BOTH C# JarvisModels.cs & Self-Test) ---
+    # --- Security Pending & Audit ---
     @app.get("/api/v1/security/pending", tags=["security"])
     @app.get("/api/v1/security/audit/pending", tags=["security"])
     async def api_security_pending_list():
@@ -1056,54 +1123,40 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
             pass
         return {"audit_logs": audit_items, "entries": audit_items}
 
-    # --- Structured Logs (Matches C# LogEntryItem: timestamp, level, module, message) ---
+    # --- Unified Structured Logs (Direct Ring Buffer with Filtering & Incremental Cursor) ---
     @app.get("/api/v1/logs", tags=["logs"])
-    async def api_logs():
+    async def api_logs(
+        level: Optional[str] = Query(default=None, description="ALL, DEBUG, INFO, WARNING, ERROR, CRITICAL (or INFO+, WARNING+)"),
+        module: Optional[str] = Query(default=None, description="Substring match on logger/module name"),
+        search: Optional[str] = Query(default=None, description="Case-insensitive search across message, module, turn_id, traceback"),
+        since_id: int = Query(default=0, ge=0, description="Return only log entries with id > since_id"),
+        limit: int = Query(default=200, ge=1, le=2000, description="Maximum number of entries to return"),
+    ):
         _telemetry_incr()
-        structured_logs: List[Dict[str, str]] = []
-        try:
-            from Core.Logger.logger import get_logger
-            jl = get_logger()
-            if hasattr(jl, "get_recent_logs"):
-                recent = jl.get_recent_logs(limit=100) or []
-                for line in recent:
-                    if isinstance(line, dict):
-                        structured_logs.append({
-                            "timestamp": str(line.get("timestamp", _now_str())),
-                            "level": str(line.get("level", "INFO")),
-                            "module": str(line.get("module", "core")),
-                            "message": str(line.get("message", "")),
-                        })
-                    elif isinstance(line, str):
-                        parts = [p.strip() for p in line.split("|", 3)]
-                        if len(parts) == 4:
-                            structured_logs.append({"timestamp": parts[0], "level": parts[1], "module": parts[2], "message": parts[3]})
-                        else:
-                            structured_logs.append({"timestamp": _now_str(), "level": "INFO", "module": "system", "message": line})
-        except Exception:
-            pass
+        entries = get_recent_logs(
+            limit=limit,
+            level=level,
+            module=module,
+            search=search,
+            since_id=since_id,
+        )
+        return {
+            "logs": entries,
+            "last_id": get_last_log_id(),
+            "total_buffered": get_recent_logs_count(),
+        }
 
-        if not structured_logs and _LOG_DIR.exists():
-            for f in sorted(_LOG_DIR.glob("*.log"), key=lambda x: x.stat().st_mtime, reverse=True)[:3]:
-                try:
-                    for raw_line in f.read_text(encoding="utf-8", errors="replace").splitlines()[-40:]:
-                        parts = [p.strip() for p in raw_line.split("|", 3)]
-                        if len(parts) == 4:
-                            structured_logs.append({"timestamp": parts[0], "level": parts[1], "module": parts[2], "message": parts[3]})
-                        elif raw_line.strip():
-                            structured_logs.append({"timestamp": _now_str(), "level": "INFO", "module": f.stem, "message": raw_line.strip()})
-                except Exception:
-                    pass
+    @app.get("/api/v1/logs/modules", tags=["logs"])
+    async def api_log_modules():
+        return {"modules": get_buffered_modules()}
 
-        return {"logs": structured_logs[-120:]}
-
-    # --- Mount WebSocket Server (/ws/desktop & /ws/lumia) ---
+    # --- Mount WebSocket Server (/ws/desktop & /ws/lumia) with shared voice_orchestrator ---
     try:
         from Network.WebSocket.ws_server import JarvisWebSocketManager
-        _ws_mgr = JarvisWebSocketManager(app)
+        _ws_mgr = JarvisWebSocketManager(app, voice_orchestrator=voice_orchestrator)
         app.state.ws_manager = _ws_mgr
     except Exception as e:
-        _logger.warning("WebSocket manager mount warning: %s", e)
+        _logger.warning("WebSocket manager mount warning: %s", e, exc_info=True)
 
     return app
 
@@ -1146,7 +1199,10 @@ def _run_self_test() -> bool:
     _check("DELETE /memory/facts/{key}", client.delete("/api/v1/memory/facts/test_k", headers=headers), 200)
     _check("GET /security/pending", client.get("/api/v1/security/pending", headers=headers), 200)
     _check("GET /security/audit", client.get("/api/v1/security/audit", headers=headers), 200)
-    _check("GET /logs", client.get("/api/v1/logs", headers=headers), 200)
+    r_logs = client.get("/api/v1/logs?limit=50", headers=headers)
+    _check("GET /logs (unified ring buffer)", r_logs, 200)
+    assert "last_id" in r_logs.json() and isinstance(r_logs.json().get("logs"), list)
+    _check("GET /logs/modules", client.get("/api/v1/logs/modules", headers=headers), 200)
     _check("Auth failure (no token)", client.get("/api/v1/status"), 401)
 
     print(f"\n=== Results: {passed} passed, {failed} failed ===\n")
@@ -1156,4 +1212,3 @@ def _run_self_test() -> bool:
 if __name__ == "__main__":
     if _run_self_test():
         print("[OK] C.E.L.E.S.T.E. REST API & Telemetry 100% synchronized with C# Desktop UI.")
-

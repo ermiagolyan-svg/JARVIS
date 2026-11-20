@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace JarvisDesktop.Models;
@@ -97,6 +97,12 @@ public class ChatResponse
 
     [JsonPropertyName("session_id")]
     public string SessionId { get; set; } = "default";
+
+    [JsonPropertyName("turn_id")]
+    public string? TurnId { get; set; }
+
+    [JsonPropertyName("llm_ms")]
+    public double LlmMs { get; set; }
 
     [JsonIgnore]
     public string EffectiveText => !string.IsNullOrWhiteSpace(SpokenResponse)
@@ -223,23 +229,92 @@ public class AuditLogResponse
 
 public class LogEntryItem
 {
+    [JsonPropertyName("id")]
+    public long Id { get; set; }
+
     [JsonPropertyName("timestamp")]
     public string Timestamp { get; set; } = string.Empty;
+
+    [JsonPropertyName("iso_timestamp")]
+    public string IsoTimestamp { get; set; } = string.Empty;
 
     [JsonPropertyName("level")]
     public string Level { get; set; } = "INFO";
 
+    [JsonPropertyName("level_no")]
+    public int LevelNo { get; set; } = 20;
+
     [JsonPropertyName("module")]
     public string Module { get; set; } = "core";
 
+    [JsonPropertyName("thread")]
+    public string Thread { get; set; } = string.Empty;
+
+    [JsonPropertyName("turn_id")]
+    public string TurnId { get; set; } = "-";
+
     [JsonPropertyName("message")]
     public string Message { get; set; } = string.Empty;
+
+    [JsonPropertyName("traceback")]
+    public string Traceback { get; set; } = string.Empty;
+
+    [JsonIgnore]
+    public string ShortTimestamp
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Timestamp)) return string.Empty;
+            int sp = Timestamp.IndexOf(' ');
+            return sp >= 0 && sp + 1 < Timestamp.Length ? Timestamp[(sp + 1)..] : Timestamp;
+        }
+    }
+
+    [JsonIgnore]
+    public bool HasTurnId => !string.IsNullOrWhiteSpace(TurnId) && TurnId != "-";
+
+    [JsonIgnore]
+    public bool HasTraceback => !string.IsNullOrWhiteSpace(Traceback);
+
+    [JsonIgnore]
+    public string FullFormattedLine
+    {
+        get
+        {
+            string head = $"[{Timestamp}] [{Level}] [{Module}]"
+                + (HasTurnId ? $" [{TurnId}]" : string.Empty)
+                + (!string.IsNullOrWhiteSpace(Thread) ? $" ({Thread})" : string.Empty)
+                + $" {Message}";
+            return HasTraceback ? $"{head}\n{Traceback}" : head;
+        }
+    }
 }
 
 public class LogsResponse
 {
     [JsonPropertyName("logs")]
     public List<LogEntryItem> Logs { get; set; } = new();
+
+    [JsonPropertyName("last_id")]
+    public long LastId { get; set; }
+
+    [JsonPropertyName("total_buffered")]
+    public int TotalBuffered { get; set; }
+}
+
+public class LogModulesResponse
+{
+    [JsonPropertyName("modules")]
+    public List<string> Modules { get; set; } = new();
+}
+
+public class WsLogPushMessage
+{
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "log_entry";
+
+    [JsonPropertyName("entry")]
+    public LogEntryItem? Entry { get; set; }
 }
 
 public class VoiceConfigModel
