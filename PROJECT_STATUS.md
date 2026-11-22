@@ -2,7 +2,7 @@
 **System:** C.E.L.E.S.T.E. v2.0 (*Cognitive Engineering & Logic Execution System for Tactical Engagements*)  
 **Architecture:** Multi-Process Hybrid (Python 3.14 x64 Core Daemon + .NET 8 WPF Holographic HUD Client)  
 **Target Runtime LLM:** Gemma-4-26B-A4B-IT (`gemma-4-26B-A4B-it-UD-IQ4_XS.gguf`) with hybrid RTX 3080 + Ryzen 7 9700X DDR5 MoE tensor offloading (`-ot`)  
-**Voice Pipeline:** Dual-Engine TTS (Gemini Online TTS + Gooya Bozorg v1.5 Local TTS with Hybrid BF16/FP32+TF32, Dynamic Runway Pipelining, Gapless sounddevice Playback & Windows Process-Tree VRAM Release) + Faster-Whisper STT (CPU Lock) + CelesteAudioDSP  
+**Voice Pipeline:** Dual-Engine TTS (Gemini Online TTS + Gooya Bozorg v1.5 Local TTS with Hybrid BF16/FP32+TF32, Dynamic Runway Pipelining, Gapless sounddevice Playback & Windows Process-Tree VRAM Release) + Shenava-Koochik-v1.0 (sherpa-onnx) + Silero VAD (CPU-only, 0 MB VRAM) STT + CelesteAudioDSP  
 **Unified Port:** `8765` (REST API & Duplex WebSockets at `/ws/lumia` and `/ws/desktop`)  
 **Persistent Storage:** SQLite3 `Data/Memory/jarvis_memory.db` with WAL mode & `user_facts`
 
@@ -99,3 +99,25 @@
   - **Verified End-to-End Benchmarks (RTX 3080 alongside Gemma-4-26B):**
     - Peak VRAM reserved reduced from 2962.0 MB (shared-RAM spill risk) down to ~2154.0 MB (safely under 2.45 GB cap).
     - Long multi-sentence TTS TTFA reduced from 12.20s to 2.72s–4.15s (depending on opening sentence length) with stall=0.0ms across 28.76s continuous 3-chunk playback (RTF ~0.56–0.58, zero Gemini fallback).
+
+- **Phase 2 (2026-11-22): Shenava-Koochik + Silero VAD CPU-Only STT Engine, Persian ITN & Config** — COMPLETED & VERIFIED.
+  - **Persian ITN (`Voice/STT/persian_itn.py`):** Implemented Persian spoken number normalization converting number words (units, teens, tens, hundreds, thousands, millions, billions with grammatical conjunction 'و') to Persian/ASCII digits, preserving surrounding punctuation. Passed all unit test cases.
+  - **Unified Configuration (`Configuration/config.json`, `Core/Config/config_loader.py`):** Added dedicated top-level `'stt'` configuration with `shenava_sherpa_onnx`, `provider: 'cpu'`, Silero VAD parameters, ITN flags, and audio device options. Updated default `stt_model_dir` to `Data/Models/stt/shenava`. Validated with 0 errors.
+  - **CPU-Only STT Engine (`Voice/STT/stt_engine.py`, `Voice/STT/__init__.py`):** Completely rewrote STTEngine using `sherpa-onnx` OfflineRecognizer (FastConformer CTC) + Silero VAD executing 100% on CPU (0 MB GPU VRAM). Added non-hardcoded device resolution (`resolve_input_device`, `open_resilient_stream` with WASAPI mapping), FIFO VAD framing with zero-padding, thread safety with `_infer_lock`, audio preprocessing (mono conversion, resampling, optional gain and Butterworth highpass filter), and RTF telemetry.
+  - **Verification:** Self-tests pass in under 3 seconds: 2s silence yields 0 STT latency; real Persian speech (`sample_fa.wav`, 8.35s) decodes cleanly in 56.8ms (RTF ~0.007). Backward-compatibility tests (`test_stt.py`) pass with 0 errors.
+
+- **Phase 3 (2026-11-22): VoiceOrchestrator Integration, TTS Echo-Suppression, Test Suite & Legacy Cleanup** — COMPLETED & VERIFIED.
+  - **VoiceOrchestrator Clean Constructor & Echo-Suppression (`Voice/voice_orchestrator.py`):**
+    - Removed legacy Whisper constructor kwargs (`STTEngine()` default initialization).
+    - Integrated dedicated `_tts_echo_suppressed` lock and state machine methods (`is_echo_suppressed()`, `pause_listening_for_tts()`, `resume_listening_after_tts(tail_cooldown_s=0.25)`).
+    - Protected `ingest_lumia_audio_chunk()` against playback bleed during TTS.
+    - Updated `barge_in()` and `unmute()` to automatically clear echo suppression and restore listening.
+    - Wrapped voice turn TTS playback in `try ... finally` to guarantee listening is always restored even if speech throws or interrupts.
+    - Expanded voice turn profiling with `vad_ms`, `stt_ms`, and `rtf`, logging unified metrics on turn completion.
+  - **WebSocket TTS Echo Suppression (`Network/WebSocket/ws_server.py`):**
+    - Integrated minimal surgical echo-suppression hook into `_trigger_tts_async()` (`_tts_play()`): pauses listening before TTS playback, awaits speech completion, and safely resumes listening with 250ms tail cooldown in `finally:` block without altering message schemas.
+  - **Offline STT Test Suite (`Voice/STT/test_stt.py`):**
+    - Replaced legacy test suite with 6 comprehensive automated non-blocking checks for Shenava-Koochik CTC + Silero VAD CPU-only engine: engine import and CPU provider check, Persian ITN normalization, 2s silence handling, real Persian WAV (`sample_fa.wav`) decoding via both file and PCM (RTF ~0.007), 48kHz to 16kHz resampling, and resilient device resolution. Cleanly closes engine and exits with code 0 in under 2 seconds.
+  - **Requirements & Legacy Cleanup (`requirements.txt`, `AI_CONTEXT.md`, `PROJECT_STATUS.md`):**
+    - Replaced `faster-whisper` with `sherpa-onnx` in `requirements.txt`.
+    - Purged all stale references to `Faster-Whisper` / `Data/Models/whisper` across architecture docs and system status.

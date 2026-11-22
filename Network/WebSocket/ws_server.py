@@ -236,15 +236,41 @@ class JarvisWebSocketManager:
                     if tts is None:
                         _logger.error('Unified TTSEngine unavailable for WebSocket text_command.')
                         return
-                    if hasattr(tts, 'speak'):
-                        try:
-                            tts.speak(text, blocking=False, turn_id=get_turn_id())
-                        except TypeError:
-                            tts.speak(text, blocking=False)
-                    elif hasattr(tts, 'synthesize_and_play'):
-                        tts.synthesize_and_play(text, blocking=False)
-                    else:
-                        _logger.error('Unified TTSEngine has neither speak() nor synthesize_and_play().')
+
+                    vo = self._get_voice_orchestrator()
+                    if vo is not None and hasattr(vo, 'pause_listening_for_tts'):
+                        vo.pause_listening_for_tts()
+
+                    try:
+                        if hasattr(tts, 'speak'):
+                            try:
+                                tts.speak(text, blocking=False, turn_id=get_turn_id())
+                            except TypeError:
+                                tts.speak(text, blocking=False)
+                        elif hasattr(tts, 'synthesize_and_play'):
+                            tts.synthesize_and_play(text, blocking=False)
+                        else:
+                            _logger.error('Unified TTSEngine has neither speak() nor synthesize_and_play().')
+                            return
+
+                        if vo is not None and hasattr(vo, '_wait_for_speech'):
+                            time.sleep(0.08)
+                            deadline = time.perf_counter() + 45.0
+                            while time.perf_counter() < deadline:
+                                is_speaking = False
+                                if hasattr(tts, 'get_status'):
+                                    try:
+                                        is_speaking = bool(tts.get_status().get('speaking', False))
+                                    except Exception:
+                                        is_speaking = False
+                                elif hasattr(tts, '_speaking'):
+                                    is_speaking = bool(tts._speaking)
+                                if not is_speaking:
+                                    break
+                                time.sleep(0.05)
+                    finally:
+                        if vo is not None and hasattr(vo, 'resume_listening_after_tts'):
+                            vo.resume_listening_after_tts(tail_cooldown_s=0.25)
                 except Exception as exc:
                     _logger.exception('WebSocket TTS playback error: %s', exc)
 

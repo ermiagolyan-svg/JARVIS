@@ -77,6 +77,8 @@ class VoiceOrchestrator:
         self._lock = threading.Lock()
         self._speaking = False
         self._muted = False
+        self._tts_echo_suppressed = False
+        self._echo_lock = threading.Lock()
         self._confirmation_pending = None
         self._on_state_change = on_state_change or (lambda s: None)
         self._active_turn_id: Optional[str] = None
@@ -130,7 +132,7 @@ class VoiceOrchestrator:
                 return False
 
             if self.stt_engine is None:
-                self.stt_engine = STTEngine(model_size='small', device='cpu', compute_type='int8')
+                self.stt_engine = STTEngine()
             if not self.stt_engine.initialize():
                 logger.error('STT engine init failed')
                 return False
@@ -208,6 +210,32 @@ class VoiceOrchestrator:
     def is_muted(self) -> bool:
         return self._muted
 
+    def is_echo_suppressed(self) -> bool:
+        with self._echo_lock:
+            return self._tts_echo_suppressed
+
+    def pause_listening_for_tts(self) -> None:
+        with self._echo_lock:
+            self._tts_echo_suppressed = True
+            if self.wake_word_engine is not None and hasattr(self.wake_word_engine, 'set_muted'):
+                try:
+                    self.wake_word_engine.set_muted(True)
+                except Exception as exc:
+                    logger.warning('Failed to pause wake word engine for TTS: %s', exc)
+        logger.debug('Echo suppression active: mic/network listening paused during TTS')
+
+    def resume_listening_after_tts(self, tail_cooldown_s: float = 0.25) -> None:
+        if tail_cooldown_s > 0 and not self._muted:
+            time.sleep(tail_cooldown_s)
+        with self._echo_lock:
+            self._tts_echo_suppressed = False
+            if not self._muted and self.wake_word_engine is not None and hasattr(self.wake_word_engine, 'set_muted'):
+                try:
+                    self.wake_word_engine.set_muted(False)
+                except Exception as exc:
+                    logger.warning('Failed to resume wake word engine after TTS: %s', exc)
+        logger.debug('Echo suppression released: listening resumed (muted=%s)', self._muted)
+
     def set_muted(self, muted: bool) -> None:
         if muted:
             self.mute()
@@ -223,7 +251,7 @@ class VoiceOrchestrator:
                 logger.warning('Failed to switch audio source to %s: %s', source, exc)
 
     def ingest_lumia_audio_chunk(self, pcm_bytes: bytes) -> None:
-        if self._muted or not pcm_bytes:
+        if self._muted or self._tts_echo_suppressed or not pcm_bytes:
             return
         if self.wake_word_engine is not None and hasattr(self.wake_word_engine, 'feed_audio'):
             self.wake_word_engine.feed_audio(pcm_bytes)
@@ -234,6 +262,14 @@ class VoiceOrchestrator:
 
     def barge_in(self):
         '''Interrupt current speech if user speaks during SPEAKING.'''
+        with self._echo_lock:
+            self._tts_echo_suppressed = False
+            if not self._muted and self.wake_word_engine is not None and hasattr(self.wake_word_engine, 'set_muted'):
+                try:
+                    self.wake_word_engine.set_muted(False)
+                except Exception as exc:
+                    logger.warning('Failed to unmute wake word engine on barge-in: %s', exc)
+
         if self.get_state() == VoiceState.SPEAKING and not self._muted:
             logger.info('BARGE-IN detected - interrupting TTS playback')
             if self.tts_engine is not None and hasattr(self.tts_engine, 'stop_speaking'):
@@ -357,9 +393,14 @@ class VoiceOrchestrator:
                 result = self.stt_engine.transcribe_pcm(pcm_bytes, sample_rate=16000, language='fa')
                 stt_ms = round((time.perf_counter() - t_stt) * 1000.0, 1)
                 text = (result.get('text') or '').strip()
+                vad_ms = float(result.get('vad_ms', 0.0))
+                stt_infer_ms = float(result.get('stt_ms', stt_ms))
+                stt_rtf = float(result.get('rtf', 0.0))
+                raw_text = (result.get('raw_text') or text).strip()
+                itn_text = (result.get('itn_text') or text).strip()
 
                 if not text:
-                    logger.info('Voice turn ignored (empty STT transcript after %.1fms)', stt_ms)
+                    logger.info('Voice turn ignored (empty STT transcript after %.1fms | vad_ms=%.1f stt_ms=%.1f)', stt_ms, vad_ms, stt_infer_ms)
                     return
 
                 dm = self._resolve_dialogue_manager()
@@ -376,16 +417,20 @@ class VoiceOrchestrator:
                 raw_tts = getattr(dm, 'last_raw_tts_response', None) or response_text
                 if raw_tts and self.tts_engine is not None:
                     self.set_state(VoiceState.SPEAKING)
+                    self.pause_listening_for_tts()
                     try:
-                        self.tts_engine.speak(raw_tts, blocking=False, turn_id=tid)
-                    except TypeError:
-                        self.tts_engine.speak(raw_tts, blocking=False)
-                    tts_wait_ms = self._wait_for_speech()
+                        try:
+                            self.tts_engine.speak(raw_tts, blocking=False, turn_id=tid)
+                        except TypeError:
+                            self.tts_engine.speak(raw_tts, blocking=False)
+                        tts_wait_ms = self._wait_for_speech()
+                    finally:
+                        self.resume_listening_after_tts(tail_cooldown_s=0.25)
 
                 total_ms = round((time.perf_counter() - t_turn0) * 1000.0, 1)
                 logger.info(
-                    'Voice Turn Complete | stt=%.1fms llm=%.1fms tts_wait=%.1fms total=%.1fms | user_chars=%d reply_chars=%d',
-                    stt_ms, llm_ms, tts_wait_ms, total_ms, len(text), len(response_text or ''),
+                    'Voice Turn Complete | vad_ms=%.1fms stt=%.1fms rtf=%.4f llm=%.1fms tts_wait=%.1fms total=%.1fms | user_chars=%d reply_chars=%d',
+                    vad_ms, stt_ms, stt_rtf, llm_ms, tts_wait_ms, total_ms, len(text), len(response_text or ''),
                 )
             except Exception as exc:
                 total_ms = round((time.perf_counter() - t_turn0) * 1000.0, 1)
@@ -413,6 +458,8 @@ class VoiceOrchestrator:
     def unmute(self):
         '''Unmute the pipeline.'''
         self._muted = False
+        with self._echo_lock:
+            self._tts_echo_suppressed = False
         if self.wake_word_engine and hasattr(self.wake_word_engine, 'set_muted'):
             self.wake_word_engine.set_muted(False)
         self.set_state(VoiceState.IDLE)
@@ -478,8 +525,10 @@ class VoiceOrchestrator:
         return {
             'state': self._state.name,
             'muted': self._muted,
+            'echo_suppressed': self._tts_echo_suppressed,
             'speaking': self._speaking,
             'initialized': self._initialized,
+            'stt_status': self.stt_engine.get_status() if (self.stt_engine and hasattr(self.stt_engine, 'get_status')) else None,
             'tts_status': self.tts_engine.get_status() if self.tts_engine else None,
         }
 
@@ -514,14 +563,43 @@ if __name__ == '__main__':
     assert orch.is_muted() is False
     print('[TEST] Mute/unmute: OK')
 
+    assert orch.is_echo_suppressed() is False
+    orch.pause_listening_for_tts()
+    assert orch.is_echo_suppressed() is True
+    assert orch.is_muted() is False
+
+    class DummyWakeWord:
+        def __init__(self):
+            self.fed = False
+        def feed_audio(self, chunk):
+            self.fed = True
+        def set_muted(self, muted):
+            pass
+
+    dummy_ww = DummyWakeWord()
+    orch.wake_word_engine = dummy_ww
+    orch.ingest_lumia_audio_chunk(b'\x00' * 320)
+    assert dummy_ww.fed is False, 'Expected audio chunk to be blocked while echo suppressed'
+
+    orch.resume_listening_after_tts(tail_cooldown_s=0.0)
+    assert orch.is_echo_suppressed() is False
+    assert orch.is_muted() is False
+
+    orch.ingest_lumia_audio_chunk(b'\x00' * 320)
+    assert dummy_ww.fed is True, 'Expected audio chunk to be ingested after echo suppression released'
+    orch.wake_word_engine = None
+    print('[TEST] Echo suppression toggle & Lumia gate: OK')
+
     orch.barge_in()
     print('[TEST] Barge-in (not speaking): OK')
 
     status = orch.get_status()
     assert 'state' in status
     assert 'muted' in status
+    assert 'echo_suppressed' in status
+    assert status['echo_suppressed'] is False
     assert isinstance(status['muted'], bool)
-    print(f'[TEST] Status snapshot: {status["state"]}, muted={status["muted"]} - OK')
+    print(f'[TEST] Status snapshot: {status["state"]}, muted={status["muted"]}, echo_suppressed={status["echo_suppressed"]} - OK')
 
     sr = orch.CHIME_SR
     duration = orch.CHIME_DURATION

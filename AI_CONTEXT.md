@@ -17,7 +17,7 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
   - **Optimization:** FlashAttention (`-fa on`), 8-bit quantized KV cache (`-ctk q8_0 -ctv q8_0`), context window of 16,384 tokens, `enable_thinking: false` (`reasoning_budget: 0`), and compute threads `-t 8 -tb 12`.
   - **VRAM Adoption:** Master orchestrator detects pre-existing `llama-server.exe` on port 8080 and adopts it instead of launching duplicate instances.
 - **Cloud AI Fallback / Hybrid Routing:** Google Gemini API (`gemini-2.5-flash`), Anthropic Claude API (`claude-3-7-sonnet-latest`), and OpenAI ChatGPT API (`gpt-4o`).
-- **Speech-to-Text (STT):** `faster-whisper` (`Systran/faster-whisper-small` model, int8 quantization, locked to CPU with 8 threads when `voice.stt_force_cpu` is enabled or free VRAM < 3800MB to avoid VRAM contention with Gemma-4-26B and Gooya).
+- **Speech-to-Text (STT):** `Shenava-Koochik-v1.0 (sherpa-onnx) + Silero VAD (CPU-only, 0 MB VRAM)` (`Data/Models/stt/shenava`, 100% CPU FastConformer CTC + Silero VAD + Persian ITN, zero GPU VRAM contention with Gemma-4-26B and Gooya).
 - **Voice Pipeline — Dual-Engine TTS:**
   1. **Gemini Online TTS (`gemini`):** Cloud neural voice (`gemini-2.5-flash-preview-tts`), selectable voices (`Kore`, `Puck`, `Fenrir`, `Aoede`), dedicated API key (`voice.online_api_key`), automatic Persian name normalization (`"C.E.L.E.S.T.E."` to `"سلست"`), 24kHz PCM decoding, and acoustic DSP processing.
   2. **Gooya Bozorg v1.5 Local TTS (`gooya`):** Local 801M Chatterbox architecture (`Reza2kn/Gooya-Bozorg-v1.5`) at `Data/Models/gooya` running in an isolated Python 3.11 subprocess worker (`Data/Models/gooya/venv`, `torch 2.6.0+cu124`, `chatterbox-tts 0.1.7`):
@@ -60,7 +60,7 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
 ### 2.4 Voice Pipeline & DSP
 - `[Voice/voice_orchestrator.py]` -> Central finite state machine (FSM) synchronizing wake word listening, speech transcription, dialogue generation, and audio synthesis -> `VoiceOrchestrator`, `VoiceState`.
 - `[Voice/WakeWord/wakeword_engine.py]` -> Continuous audio stream listener computing RMS energy levels and switching between physical microphones and incoming network audio -> `WakeWordEngine`.
-- `[Voice/STT/stt_engine.py]` -> Faster-Whisper speech-to-text inference engine locked to CPU with 8 threads when `voice.stt_force_cpu` is enabled or free VRAM < 3800MB -> `STTEngine`.
+- `[Voice/STT/stt_engine.py]` -> Shenava-Koochik-v1.0 (sherpa-onnx) + Silero VAD (CPU-only, 0 MB VRAM) speech-to-text and VAD engine with Persian ITN -> `STTEngine`.
 - `[Voice/TTS/tts_engine.py]` -> Dual-engine neural TTS router (Gemini Online + Gooya Bozorg v1.5) featuring Dynamic Runway Producer-Consumer pipelining, sentence-first Persian/English chunking, gapless `sounddevice` continuous audio playback (`_ContinuousAudioPlayer` + `winsound` fallback), instant `stop_speaking` barge-in, clean Gemini fallback, and Windows process-tree `unload_gooya()` -> `TTSEngine`, `_ContinuousAudioPlayer`.
 - `[Voice/TTS/gooya_worker.py]` -> Isolated Python 3.11 warm CUDA worker running Gooya Bozorg v1.5 in strictly offline hybrid precision (`t3` in `bf16` + SDPA, `s3gen` & `ve` in `fp32` + TF32), cached fp32 speaker conditioning, startup CUDA kernel warmup, comma-preserving Persian normalization, adaptive `cfm_timesteps`, and VRAM peak trimming (<2.45 GB) -> `GooyaWorker`.
 - `[Voice/AudioDSP/jarvis_dsp.py]` -> Acoustic DSP filter chain executing real-time pitch shifting, metallic comb filtering, and synthetic reverb convolution -> `CelesteAudioDSP` (alias `JarvisAudioDSP`).
@@ -155,7 +155,7 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
     "gooya_warmup_on_load": true,
     "gooya_trim_silence": true,
     "gooya_use_continuous_audio": true,
-    "stt_model_dir": "Data/Models/whisper",
+    "stt_model_dir": "Data/Models/stt/shenava",
     "stt_force_cpu": true,
     "wake_word": "hey_jarvis",
     "wake_threshold": 0.15,
@@ -240,7 +240,7 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
        [VoiceOrchestrator FSM -> LISTENING]
                   │
                   ▼
-       [STTEngine (Faster-Whisper on CPU)] ──> Transcribed Persian Text
+       [STTEngine (Shenava-Koochik + Silero VAD on CPU)] ──> Transcribed Persian Text
                   │
                   ▼
        [VoiceOrchestrator FSM -> THINKING]
