@@ -1,5 +1,4 @@
-# C.E.L.E.S.T.E. Voice - Studio-Clean Cyber-Ice Vocal Chain DSP
-# Keeps class name JarvisAudioDSP (plus CelesteAudioDSP alias) for full compatibility.
+# V.E.S.P.E.R. Voice - Studio-Clean Vocal Chain DSP
 import logging
 from pathlib import Path
 from typing import Optional
@@ -11,8 +10,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 logger = logging.getLogger(__name__)
 
 
-class JarvisAudioDSP:
-    # Studio-clean vocal mastering chain for C.E.L.E.S.T.E. Persian Neural TTS:
+class VesperAudioDSP:
+    # Studio-clean vocal mastering chain for V.E.S.P.E.R. Persian Neural TTS:
     # - Defaults to 0.0 metallic comb and 0.0 reverb so neural speech is 100% natural, warm, and echo-free.
     # - Applies gentle 75 Hz rumble filter + smooth studio presence (+1.2 dB @ 3.8 kHz) + soft limiter.
     # - Supports live tuning from Desktop UI sliders when the user desires custom effects.
@@ -202,15 +201,12 @@ class JarvisAudioDSP:
         return ir.astype(np.float32)
 
 
-CelesteAudioDSP = JarvisAudioDSP
-
-
 if __name__ == '__main__':
-    dsp = JarvisAudioDSP()
+    dsp = VesperAudioDSP()
     sr = dsp._sr
     t = np.linspace(0, 1.0, sr, dtype=np.float32)
     tone = 0.5 * np.sin(2 * np.pi * 440 * t).astype(np.float32)
     out = dsp.process(tone)
     assert len(out) == len(tone)
-    print(f'[OK] Studio-Clean C.E.L.E.S.T.E. DSP verified at {sr} Hz.')
+    print(f'[OK] Studio-Clean V.E.S.P.E.R. DSP verified at {sr} Hz.')
     

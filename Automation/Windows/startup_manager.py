@@ -1,4 +1,4 @@
-# JARVIS Windows Startup Manager
+# V.E.S.P.E.R. Windows Startup Manager
 import logging
 import os
 import sys
@@ -10,27 +10,27 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 _REGISTRY_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-_REGISTRY_VALUE_NAME = "JARVIS_AI_System"
-_TASK_NAME = "JARVIS_AI_System"
-_JARVIS_WATCHDOG = "Core\\jarvis_watchdog.py"
+_REGISTRY_VALUE_NAME = "VESPER_AI_System"
+_TASK_NAME = "VESPER_AI_System"
+_VESPER_WATCHDOG = "Core\\vesper_watchdog.py"
 _VENV_PYTHONW = ".venv\\Scripts\\pythonw.exe"
 
 
 def _project_root() -> Path:
-    return Path(__file__).resolve().parent.parent.parent
+    return Path(__file__).resolve().parents[2]
 
 
 def _build_entry_path() -> str:
-    return str(_project_root() / _JARVIS_WATCHDOG)
+    return str(_project_root() / _VESPER_WATCHDOG)
 
 
 def _build_vbs_entry_path() -> str:
-    return str(_project_root() / "Installer" / "start_jarvis_hidden.vbs")
+    return str(_project_root() / "Installer" / "start_vesper_hidden.vbs")
 
 
 def register_startup() -> bool:
     project_root = _project_root()
-    entry_path = str(project_root / _JARVIS_WATCHDOG)
+    entry_path = str(project_root / _VESPER_WATCHDOG)
 
     try:
         key = winreg.OpenKey(
@@ -84,7 +84,7 @@ def is_registered() -> bool:
         )
         value, _ = winreg.QueryValueEx(key, _REGISTRY_VALUE_NAME)
         winreg.CloseKey(key)
-        registry_ok = bool(value) and "jarvis_watchdog" in str(value).lower()
+        registry_ok = bool(value) and "vesper_watchdog" in str(value).lower()
     except (OSError, FileNotFoundError):
         registry_ok = False
 
@@ -142,7 +142,7 @@ def get_startup_info() -> dict:
 
 if __name__ == "__main__":
     print("=" * 70)
-    print("JARVIS Startup Manager - Self Test (non-blocking)")
+    print("V.E.S.P.E.R. Startup Manager - Self Test (non-blocking)")
     print("=" * 70)
 
     info = get_startup_info()

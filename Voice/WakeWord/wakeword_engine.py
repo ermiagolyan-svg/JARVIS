@@ -1,16 +1,18 @@
-'''JARVIS Voice - Continuous Wake-Word Detection Engine (Stage 3.3).'''
+'''V.E.S.P.E.R. Voice - Continuous Wake-Word Detection Engine.'''
 import collections
 import logging
 import sys
+from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
 
-PROJECT_ROOT = __import__('pathlib').Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 logger = logging.getLogger(__name__)
 
 SAMPLE_RATE = 16000
 CHUNK_SAMPLES = int(1280)
+_TEMP_FALLBACK_OWW_MODEL = "hey_jarvis"  # Temporary openWakeWord fallback until custom vesper.onnx is trained
 
 
 class WakeWordEngine:
@@ -34,20 +36,35 @@ class WakeWordEngine:
             return True
         try:
             from openwakeword import Model as OWModel
-            try:
-                from openwakeword.utils import download_models
-                download_models(model_names=['hey_jarvis'])
-            except Exception as exc:
-                logger.warning('Failed to download wake-word models automatically: %s', exc, exc_info=True)
+
+            custom_model_path = PROJECT_ROOT / "Data" / "Models" / "wakeword" / "vesper.onnx"
+            if custom_model_path.exists():
+                logger.info("Found custom V.E.S.P.E.R. wake-word model at %s", custom_model_path)
+                model_target = [str(custom_model_path)]
+                model_name = "vesper"
+            else:
+                logger.warning(
+                    "Custom vesper.onnx not found at %s. Falling back to temporary model: %s",
+                    custom_model_path,
+                    _TEMP_FALLBACK_OWW_MODEL,
+                )
+                try:
+                    from openwakeword.utils import download_models
+                    download_models(model_names=[_TEMP_FALLBACK_OWW_MODEL])
+                except Exception as exc:
+                    logger.warning("Failed to download wake-word models automatically: %s", exc, exc_info=True)
+                model_target = [_TEMP_FALLBACK_OWW_MODEL]
+                model_name = _TEMP_FALLBACK_OWW_MODEL
+
             # Windows has no tflite-runtime wheel; use onnxruntime directly
             if sys.platform == 'win32':
                 logger.info('Windows detected: using onnxruntime model format')
                 self._model = OWModel(
-                    wakeword_models=['hey_jarvis'], device='cpu', inference_framework='onnx')
+                    wakeword_models=model_target, device='cpu', inference_framework='onnx')
             else:
-                self._model = OWModel(wakeword_models=['hey_jarvis'], device='cpu')
+                self._model = OWModel(wakeword_models=model_target, device='cpu')
             self._initialized = True
-            logger.info('WakeWordEngine initialized (hey_jarvis, CPU)')
+            logger.info('WakeWordEngine initialized (%s, CPU)', model_name)
             return True
         except Exception as exc:
             logger.error('Failed to initialize wake-word engine: %s', exc)
@@ -150,7 +167,7 @@ class WakeWordEngine:
 
 if __name__ == '__main__':
     print('=' * 60)
-    print('JARVIS WakeWordEngine - Self Test (Stage 3.3)')
+    print('V.E.S.P.E.R. WakeWordEngine - Self Test')
     print('=' * 60)
     engine = WakeWordEngine(
         on_wake_word_detected=lambda ww: logger.info('WAKE: %s', ww),

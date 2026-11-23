@@ -1,10 +1,10 @@
-# C.E.L.E.S.T.E. v2.0 Project Status
-**System:** C.E.L.E.S.T.E. v2.0 (*Cognitive Engineering & Logic Execution System for Tactical Engagements*)  
+# V.E.S.P.E.R. Project Status
+**System:** V.E.S.P.E.R. (*Voice-Enabled Strategic Processing & Execution Resource* / `vesper` / `وِسپِر`)  
 **Architecture:** Multi-Process Hybrid (Python 3.14 x64 Core Daemon + .NET 8 WPF Holographic HUD Client)  
 **Target Runtime LLM:** Gemma-4-26B-A4B-IT (`gemma-4-26B-A4B-it-UD-IQ4_XS.gguf`) with hybrid RTX 3080 + Ryzen 7 9700X DDR5 MoE tensor offloading (`-ot`)  
-**Voice Pipeline:** Dual-Engine TTS (Gemini Online TTS + Gooya Bozorg v1.5 Local TTS with Hybrid BF16/FP32+TF32, Dynamic Runway Pipelining, Gapless sounddevice Playback & Windows Process-Tree VRAM Release) + Shenava-Koochik-v1.0 (sherpa-onnx) + Silero VAD (CPU-only, 0 MB VRAM) STT + CelesteAudioDSP  
+**Voice Pipeline:** Dual-Engine TTS (Gemini Online TTS + Gooya Bozorg v1.5 Local TTS with Hybrid BF16/FP32+TF32, Dynamic Runway Pipelining, Gapless sounddevice Playback & Windows Process-Tree VRAM Release) + Shenava-Koochik-v1.0 (sherpa-onnx) + Silero VAD (CPU-only, 0 MB VRAM) STT + VesperAudioDSP  
 **Unified Port:** `8765` (REST API & Duplex WebSockets at `/ws/lumia` and `/ws/desktop`)  
-**Persistent Storage:** SQLite3 `Data/Memory/jarvis_memory.db` with WAL mode & `user_facts`
+**Persistent Storage:** SQLite3 `Data/Memory/vesper_memory.db` with WAL mode & `user_facts`
 
 ---
 
@@ -15,10 +15,10 @@
 - **Stage 3.1 to 3.4 (STT, TTS, DSP, WakeWord, VoiceOrchestrator):** COMPLETED & VERIFIED
 - **Stage 4.1 to 4.3 (4-Tier Security, HardwareMonitor, AutomationRouter):** COMPLETED & VERIFIED
 - **Stage 5.1 to 5.2 + Patch 5.2 (NetworkAuthManager with ipaddress & brute-force lockout, FastAPI REST Server on port 8765):** COMPLETED & VERIFIED
-- **Stage 5.3 (JarvisWebSocketManager at /ws/lumia & /ws/desktop, 16kHz PCM binary audio streaming, automatic mic failover network <-> mic):** COMPLETED & VERIFIED
-- **Stage 6.1 (JarvisMasterService 9-step orchestrator, Single-Instance Mutex, VRAM-safe LLM adoption & --dry-run):** COMPLETED & VERIFIED
-- **Stage 6.2 (StartupManager HKCU Run & Task Scheduler, jarvis_watchdog.py, start_jarvis_hidden.vbs):** COMPLETED & VERIFIED
-- **Stage 7.1 (Desktop WPF Foundation, Iron Man Holographic Theme, JarvisModels & JarvisBackendClient):** COMPLETED & VERIFIED
+- **Stage 5.3 (VesperWebSocketManager at /ws/lumia & /ws/desktop, 16kHz PCM binary audio streaming, automatic mic failover network <-> mic):** COMPLETED & VERIFIED
+- **Stage 6.1 (VesperMasterService 9-step orchestrator, Single-Instance Mutex, VRAM-safe LLM adoption & --dry-run):** COMPLETED & VERIFIED
+- **Stage 6.2 (StartupManager HKCU Run & Task Scheduler, vesper_watchdog.py, start_vesper_hidden.vbs):** COMPLETED & VERIFIED
+- **Stage 7.1 (Desktop WPF Foundation, Iron Man Holographic Theme, Desktop Client & Models):** COMPLETED & VERIFIED
 - **Stage 7.2 (Desktop WPF Holographic HUD, Animated Concentric Arc Reactor, Live RMS Visualizer, Telemetry & RTL Persian Chat):** COMPLETED & VERIFIED
 - **Stage 7.3 (Desktop WPF Management Tabs: Voice/DSP Config, SQLite Facts CRUD, Security Audit/Startup Toggle & Live Logs):** COMPLETED & VERIFIED
 
@@ -26,7 +26,7 @@
 
 ## System Audit & Bug Fix History
 
-- **Bug Fix (2026-11-12):** `jarvis_main.py` production path never started uvicorn on port 8765. Added `import uvicorn` + `uvicorn.run()` call in `_step9_ready_report()`. Also added health watchdog thread startup before the blocking `uvicorn.run()`.
+- **Bug Fix (2026-11-12):** `vesper_main.py` production path never started uvicorn on port 8765. Added `import uvicorn` + `uvicorn.run()` call in `_step9_ready_report()`. Also added health watchdog thread startup before the blocking `uvicorn.run()`.
 - **Task 2 (2026-11-14): LLM Client Message Sanitization & DialogueManager Action Security Enforcement** — COMPLETED & VERIFIED.
   - `Core/AI/llm_client.py`: Fixed `_sanitize_messages` fallback so that when only system messages are passed, the system content is used as a user turn (or `"Hello"` if empty), guaranteeing the returned list always starts with at most one `system` message (index 0), alternates `user`/`assistant`, and ends with a `user` message for `llama-server.exe` Jinja template compatibility.
   - `Core/Conversation/dialogue_manager.py`: Imported `get_automation_router`; replaced raw `subprocess.run(cmd, shell=True)` and direct file I/O in `_execute_action` with permission-checked routing through `router.check_permission(...)` + `router.execute(...)`. Denied actions now return a clear Persian denial message (`دسترسی رد شد: ...`). `web_search` remains unchanged via `get_web_search_engine()`.
@@ -42,10 +42,10 @@
 ## Backend Evolution (v2.0 Architecture)
 
 - **Backend Phase 1 (2026-11-18): Config Consolidation, Gemma-4-26B-A4B MoE Offloading, Critical Bug Fixes & Cleanup** — COMPLETED & VERIFIED.
-  - Step 1: Upgraded `Configuration/config.json` and `Core/Config/config_loader.py` to unified v2.0.0 schema (CELESTE, unified port 8765, dual-engine gemini/gooya, preserved cloud_ai/web_search/online_api_key keys).
+  - Step 1: Upgraded `Configuration/config.json` and `Core/Config/config_loader.py` to unified v2.0.0 schema (VESPER, unified port 8765, dual-engine gemini/gooya, preserved cloud_ai/web_search/online_api_key keys).
   - Step 2: Updated `Core/ModelManager/llamacpp_manager.py` command builder to support Gemma-4-26B-A4B MoE with `-ngl 32`, `-c 8192`, `-b 2048`, `-ub 512`, `-t 8`, `-tb 8`, `-fa on`, `-ctk q8_0`, `-ctv q8_0`, and `-ot "blk\.(1[0-9]|[2-9][0-9])\.ffn_.*_exps\.=CPU"`, keeping port 8080 adoption logic intact.
   - Step 3: Fixed broken telemetry import in `Network/WebSocket/ws_server.py` to `Desktop.Monitoring.hardware_monitor.HardwareMonitor`, combining live CPU, GPU, VRAM, and RAM metrics into WebSocket `hud_update` broadcasts.
-  - Step 4: Fixed 401 Unauthorized watchdog bug in `Core/jarvis_watchdog.py` by switching health check URL to unauthenticated `/api/v1/health`.
+  - Step 4: Fixed 401 Unauthorized watchdog bug in `Core/vesper_watchdog.py` by switching health check URL to unauthenticated `/api/v1/health`.
   - Step 5: Cleaned up obsolete files `Core/AI/llm_client_new.py`, `Core/Conversation/_fix_llm.py`, `Network/Voice/`, `Voice/TTS/tts_engine.py.bak`, `Network/API/rest_server.py.bak`, and verified `config.json.bak` removal.
   - Step 6: Verified with non-blocking self-tests (`config_loader`, `llamacpp_manager`, `hardware_monitor`, `ws_server`, `rest_server`).
 
@@ -65,7 +65,7 @@
     - Replaced hardcoded model name in `/api/v1/status` with live `llama_cpp.target_model_name` from `ConfigManager` (`"Gemma 4 26B-A4B IT (IQ4_XS)"`).
     - Directly connected `GET /api/v1/memory/facts`, `POST /api/v1/memory/facts`, and `DELETE /api/v1/memory/facts/{fact_key}` to SQLite via `MemoryManager`, completely removing reliance on `_facts_fallback_store`.
     - Updated `GET`, `POST`, and `PUT` `/api/v1/voice/config` to accept and return the full voice and DSP settings dictionary (`engine_mode`, `online_api_key`, `gemini_model`, `gemini_voice_name`, `gooya_model_dir`, `gooya_reference_audio`, `gooya_exaggeration`, `gooya_cfg_weight`, `gooya_precision`, `gooya_auto_unload`, `dsp_pitch_semitones`, `dsp_metallic_mix`, `dsp_reverb_mix`, `wake_threshold`).
-    - Persisted settings changes to `Configuration/config.json` via `ConfigManager`, updated `CelesteAudioDSP` and `WakeWordEngine` live, and called `tts_engine.update_config()` for instant mode switching (`gemini` <-> `gooya`) and dynamic VRAM unloading.
+    - Persisted settings changes to `Configuration/config.json` via `ConfigManager`, updated `VesperAudioDSP` and `WakeWordEngine` live, and called `tts_engine.update_config()` for instant mode switching (`gemini` <-> `gooya`) and dynamic VRAM unloading.
   - Step 3: Verified with non-blocking self-tests:
     - `test_memory.py`: 100% passed with exit code 0.
     - `Network.API.rest_server`: 18/18 assertions passed with exit code 0.
@@ -87,11 +87,11 @@
   - Step 3: Updated `PROJECT_STATUS.md` with complete v2.0 tracking and synchronization.
 
 - **Frontend Phase 5 (2026-11-19): Upgrade WPF Voice & TTS UI for Dual-Engine (Gemini + Gooya v1.5) & VRAM Controls** — COMPLETED & VERIFIED.
-  - Step 1: Upgraded `Desktop/UI/Models/JarvisModels.cs` with expanded `VoiceConfigModel` (engine_mode, online_api_key, gemini_model, gemini_voice_name, gooya_model_dir, gooya_reference_audio, gooya_exaggeration, gooya_cfg_weight, gooya_precision, gooya_auto_unload, dsp_pitch_semitones, dsp_metallic_mix, dsp_reverb_mix, wake_threshold) and `SystemStatusModel` target model name `Gemma 4 26B-A4B IT (IQ4_XS)`.
-  - Step 2: Added `GetVoiceConfigAsync()` to `Desktop/UI/Services/JarvisBackendClient.cs` for querying `GET /api/v1/voice/config`.
+  - Step 1: Upgraded Desktop UI models with expanded `VoiceConfigModel` (engine_mode, online_api_key, gemini_model, gemini_voice_name, gooya_model_dir, gooya_reference_audio, gooya_exaggeration, gooya_cfg_weight, gooya_precision, gooya_auto_unload, dsp_pitch_semitones, dsp_metallic_mix, dsp_reverb_mix, wake_threshold) and `SystemStatusModel` target model name `Gemma 4 26B-A4B IT (IQ4_XS)`.
+  - Step 2: Added `GetVoiceConfigAsync()` to Desktop UI backend client for querying `GET /api/v1/voice/config`.
   - Step 3: Upgraded `Desktop/UI/MainWindow.xaml` Tab 1 to "VOICE & TTS" with interactive engine switcher (`gemini` vs `gooya`), Gemini model & voice selectors, Gooya speaker prompt selector, exaggeration/CFG sliders, BF16/FP32 precision picker, auto-unload VRAM toggle, and mastering DSP sliders.
   - Step 4: Upgraded `Desktop/UI/MainWindow.xaml.cs` with `LoadVoiceConfigFromBackendAsync()`, dynamic panel visibility toggling, file browsing dialog, real-time slider labels, live config persistence, and voice testing.
-  - Step 5: Compiled with `dotnet build Desktop/UI/JarvisDesktop.csproj -c Release` (0 Warnings, 0 Errors). Staged and committed.
+  - Step 5: Compiled with `dotnet build Desktop/UI/` in Release (0 Warnings, 0 Errors). Staged and committed.
 
 - **Backend Phase 6 (2026-11-20): Gooya Bozorg v1.5 Hybrid Stability, Dynamic Runway Pipelined TTS & VRAM Cap (Phase 1 & 1.5)** — COMPLETED & VERIFIED.
   - **Hybrid Precision & Offline Stability (`Voice/TTS/gooya_worker.py`):** Resolved `s3gen/flow.py` bf16 crash by casting only `t3` to `bfloat16` + SDPA while keeping `s3gen` and `ve` strictly in `float32` + TF32; enforced offline HF env (`HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, `TQDM_DISABLE=1`), Windows child PID process-tree cleanup (`taskkill /T /F`), pre-cached 24kHz mono `speaker_reference_clean.wav`, startup CUDA kernel warmup, comma-preserving Persian normalization, and Windows-safe CUDA allocator fragmentation cap (`max_split_size_mb:128,garbage_collection_threshold:0.7`).

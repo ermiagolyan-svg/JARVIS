@@ -21,11 +21,11 @@ setup_unified_logging()
 install_exception_hooks()
 
 # --- Windows Single-Instance Mutex ---
-_MUTEX_NAME = r"Global\JARVIS_CORE_SINGLE_INSTANCE_MUTEX"
+_MUTEX_NAME = r"Global\VESPER_CORE_SINGLE_INSTANCE_MUTEX"
 
 
 def _acquire_single_instance_mutex() -> bool:
-    """Acquire a named mutex to prevent duplicate JARVIS instances.
+    """Acquire a named mutex to prevent duplicate V.E.S.P.E.R. instances.
     Returns True if this instance owns the mutex (first instance).
     """
     handle = ctypes.windll.kernel32.CreateMutexW(None, True, _MUTEX_NAME)
@@ -46,13 +46,13 @@ from Core.ModelManager.llamacpp_manager import LlamaCppManager
 from Voice.STT.stt_engine import STTEngine
 from Voice.WakeWord.wakeword_engine import WakeWordEngine
 from Voice.TTS.tts_engine import TTSEngine
-from Voice.AudioDSP.jarvis_dsp import JarvisAudioDSP
+from Voice.AudioDSP.vesper_dsp import VesperAudioDSP
 from Voice.voice_orchestrator import VoiceOrchestrator
 from Network.API.rest_server import create_rest_app
 
 
-class JarvisMasterService:
-    """Main JARVIS / C.E.L.E.S.T.E. service orchestrator for Core/jarvis_main.py."""
+class VesperMasterService:
+    """Main V.E.S.P.E.R. service orchestrator for Core/vesper_main.py."""
 
     def __init__(self, dry_run: bool = False):
         self._dry_run = dry_run
@@ -63,7 +63,7 @@ class JarvisMasterService:
         # Always initialize unified logger immediately so early failures never crash on None
         setup_unified_logging()
         install_exception_hooks()
-        self.logger = get_logger("jarvis_main")
+        self.logger = get_logger("vesper_main")
 
         # Core components
         self.config: ConfigManager = None
@@ -73,7 +73,7 @@ class JarvisMasterService:
         self.stt_engine: STTEngine = None
         self.wake_word_engine: WakeWordEngine = None
         self.tts_engine: TTSEngine = None
-        self.dsp: JarvisAudioDSP = None
+        self.dsp: VesperAudioDSP = None
         self.app = None
 
     # --- Step 1: Core Initialization ---
@@ -158,7 +158,7 @@ class JarvisMasterService:
             self.stt_engine = STTEngine()
             self.wake_word_engine = WakeWordEngine()
             self.tts_engine = TTSEngine()
-            self.dsp = JarvisAudioDSP()
+            self.dsp = VesperAudioDSP()
 
             # Create VoiceOrchestrator (engines injected as attributes)
             self.voice_orchestrator = VoiceOrchestrator()
@@ -341,7 +341,7 @@ class JarvisMasterService:
     def run(self) -> None:
         """Entry point: initialize and start the service."""
         if not _acquire_single_instance_mutex():
-            self.logger.error("Another V.E.S.P.E.R. / JARVIS instance is already running. Exiting.")
+            self.logger.error("Another V.E.S.P.E.R. instance is already running. Exiting.")
             sys.exit(1)
 
         try:
@@ -356,7 +356,7 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true", help="Run readiness check only")
     args = parser.parse_args()
 
-    service = JarvisMasterService(dry_run=args.dry_run)
+    service = VesperMasterService(dry_run=args.dry_run)
 
     # Register signal handlers
     signal.signal(signal.SIGINT, service._shutdown_handler)

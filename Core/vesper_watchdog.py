@@ -1,4 +1,4 @@
-# JARVIS Watchdog - Supervisor for Core/jarvis_main.py
+# V.E.S.P.E.R. Watchdog - Supervisor for Core/vesper_main.py
 import os
 import sys
 import time
@@ -10,7 +10,7 @@ from pathlib import Path
 _project_root = Path(__file__).resolve().parent.parent
 
 # --- Logging setup ---
-_logger = logging.getLogger("jarvis_watchdog")
+_logger = logging.getLogger("vesper_watchdog")
 _handler = logging.StreamHandler(sys.stdout)
 _handler.setFormatter(logging.Formatter("[WATCHDOG] %(asctime)s %(message)s", datefmt="%H:%M:%S"))
 _logger.addHandler(_handler)
@@ -18,7 +18,7 @@ _logger.setLevel(logging.INFO)
 
 
 def _build_watchdog_path() -> Path:
-    return _project_root / "Core" / "jarvis_main.py"
+    return _project_root / "Core" / "vesper_main.py"
 
 
 def _check_api_health(timeout: float = 3.0) -> bool:
@@ -32,14 +32,14 @@ def _check_api_health(timeout: float = 3.0) -> bool:
         return False
 
 
-def _run_jarvis_main(test_once: bool = False) -> int:
-    """Execute Core/jarvis_main.py. Returns exit code."""
+def _run_vesper_main(test_once: bool = False) -> int:
+    """Execute Core/vesper_main.py. Returns exit code."""
     watchdog_path = _build_watchdog_path()
     cmd = [str(_project_root / ".venv" / "Scripts" / "python.exe"), str(watchdog_path)]
     if test_once:
         cmd.append("--test-once")
 
-    _logger.info("Starting jarvis_main.py (pid will be tracked)")
+    _logger.info("Starting vesper_main.py (pid will be tracked)")
     proc = subprocess.Popen(
         cmd,
         cwd=str(_project_root),
@@ -51,8 +51,8 @@ def _run_jarvis_main(test_once: bool = False) -> int:
 
 
 def run_watchdog(test_once: bool = False) -> None:
-    """Main watchdog loop. Monitors jarvis_main.py and restarts on failure."""
-    _logger.info("JARVIS Watchdog started")
+    """Main watchdog loop. Monitors vesper_main.py and restarts on failure."""
+    _logger.info("V.E.S.P.E.R. Watchdog started")
     _logger.info("Watchdog path: %s", str(_build_watchdog_path()))
     _logger.info("Mode: %s", "test-once" if test_once else "continuous")
 
@@ -61,7 +61,7 @@ def run_watchdog(test_once: bool = False) -> None:
     restart_count = 0
 
     while True:
-        proc = _run_jarvis_main(test_once)
+        proc = _run_vesper_main(test_once)
 
         if test_once:
             # In test mode, wait for the process to finish naturally
@@ -75,7 +75,7 @@ def run_watchdog(test_once: bool = False) -> None:
         # Continuous monitoring: poll status endpoint every 5 seconds
         while True:
             if proc.poll() is not None:
-                _logger.warning("jarvis_main.py exited with code %d", proc.returncode)
+                _logger.warning("vesper_main.py exited with code %d", proc.returncode)
                 break
             try:
                 healthy = _check_api_health(timeout=2.0)

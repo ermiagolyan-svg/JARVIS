@@ -1,5 +1,5 @@
 """
-JARVIS Configuration Engine
+V.E.S.P.E.R. Configuration Engine
 Thread-safe Singleton ConfigManager that loads, validates, reads, updates,
 and saves Configuration/config.json with automatic default restoration.
 """
@@ -70,14 +70,14 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "gemini_model": "gemini-2.5-flash-preview-tts",
         "gemini_voice_name": "Kore",
         "gooya_model_dir": "Data/Models/gooya",
-        "gooya_reference_audio": "Data/Models/gooya/speaker_reference.wav",
+        "gooya_reference_audio": "Data/Models/gooya/speaker_reference_clean.wav",
         "gooya_exaggeration": 0.5,
         "gooya_cfg_weight": 0.5,
         "gooya_precision": "bf16",
         "gooya_auto_unload": False,
         "stt_model_dir": "Data/Models/stt/shenava",
         "stt_force_cpu": True,
-        "wake_word": "hey_jarvis",
+        "wake_word": "vesper",
         "wake_threshold": 0.5,
         "dsp_pitch_semitones": -0.3,
         "dsp_metallic_mix": 0.0,
@@ -111,7 +111,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "stall_timeout_sec": 3.0,
     },
     "memory": {
-        "db_path": "Data/Memory/jarvis_memory.db",
+        "db_path": "Data/Memory/vesper_memory.db",
         "max_context_messages": 20,
         "retention_days": 365,
     },
@@ -158,7 +158,7 @@ class ConfigManager:
     """
     Thread-safe Singleton configuration manager.
 
-    Loads, validates, reads, updates, and saves the JARVIS configuration
+    Loads, validates, reads, updates, and saves the V.E.S.P.E.R. configuration
     file (Configuration/config.json) with automatic default restoration
     for any missing or invalid keys.
 

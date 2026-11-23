@@ -1,4 +1,4 @@
-# JARVIS Application Manager Module
+# V.E.S.P.E.R. Application Manager Module
 import os, sys, subprocess, logging, time, json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -145,7 +145,7 @@ def get_app_manager() -> AppManager:
 
 if __name__ == "__main__":
     print("=" * 70)
-    print("JARVIS Application Manager - Self Test")
+    print("V.E.S.P.E.R. Application Manager - Self Test")
     print("=" * 70)
     am = get_app_manager()
     print(f"\n[KNOWN APPS] ({len(am.list_apps())} entries)")

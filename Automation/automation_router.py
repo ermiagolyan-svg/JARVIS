@@ -1,4 +1,4 @@
-# JARVIS Automation Router
+# V.E.S.P.E.R. Automation Router
 # Wires system_control, app_manager, file_manager through SecurityPermissionManager
 # with role-based routing and command execution.
 
@@ -214,7 +214,7 @@ def get_automation_router(role: Role = Role.USER) -> AutomationRouter:
 
 if __name__ == "__main__":
     print("=" * 70)
-    print("JARVIS Automation Router - Self Test")
+    print("V.E.S.P.E.R. Automation Router - Self Test")
     print("=" * 70)
     router = get_automation_router(role=Role.USER)
     pm = router.permission_manager
@@ -236,7 +236,7 @@ if __name__ == "__main__":
     print(f"  result: success={r.get('success')}")
 
     print("\n[FILE MANAGER - scan sensitive]")
-    tmp_dir = Path(os.environ.get("TEMP", str(Path.home()))) / "jarvis_router_test"
+    tmp_dir = Path(os.environ.get("TEMP", str(Path.home()))) / "vesper_router_test"
     tmp_dir.mkdir(exist_ok=True)
     test_file = tmp_dir / "router_test.txt"
     test_file.write_text("password=secret123\napi_key=abcdef0123456789", encoding="utf-8")

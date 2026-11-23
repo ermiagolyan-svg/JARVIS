@@ -1,12 +1,12 @@
-"""Thread-safe SQLite database manager for JARVIS memory persistence."""
+"""Thread-safe SQLite database manager for V.E.S.P.E.R. memory persistence."""
 
 import sqlite3
 import threading
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
-
-DB_PATH = Path(r"D:\AI\JARVIS\Data\Memory\jarvis_memory.db")
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DB_PATH = _PROJECT_ROOT / "Data" / "Memory" / "vesper_memory.db"
 
 
 class DatabaseManager:

@@ -1,4 +1,4 @@
-# C.E.L.E.S.T.E. Voice - Dual-Engine TTS (Gemini + Gooya Bozorg v1.5) [Phase 1.5]
+# V.E.S.P.E.R. Voice - Dual-Engine TTS (Gemini + Gooya Bozorg v1.5) [Phase 1.5]
 # Low-Latency Streaming & Prosody-First Architecture:
 #   - Dynamic Runway Scheduler (Just-In-Time chunk sizing from live playback buffer + EWMA RTF)
 #   - Sentence-first Persian/English segmentation (preserves full-sentence cadence & decimals)
@@ -214,7 +214,7 @@ class TTSEngine:
 
         if (
             auto_preload
-            and not os.environ.get('CELESTE_NO_AUTO_PRELOAD')
+            and not os.environ.get('VESPER_NO_AUTO_PRELOAD')
             and self._engine_mode == 'gooya'
             and not bool(self._config.get('gooya_auto_unload', False))
         ):
@@ -239,7 +239,7 @@ class TTSEngine:
                 and not bool(self._config.get('gooya_auto_unload', False))
                 and not self._gooya_loaded
                 and not self._preloading
-                and not os.environ.get('CELESTE_NO_AUTO_PRELOAD')
+                and not os.environ.get('VESPER_NO_AUTO_PRELOAD')
             )
         if should_preload:
             self.preload_gooya(blocking=False)
@@ -354,10 +354,8 @@ class TTSEngine:
         text = re.sub(r'<action>.*?</action>', '', text, flags=re.DOTALL)
         text = re.sub(r'<fact>.*?</fact>', '', text, flags=re.DOTALL)
         text = re.sub(r'\[Action.*?\]', '', text)
-        text = re.sub(r'V\s*\.\s*E\s*\.\s*S\s*\.\s*P\s*\.\s*E\s*\.\s*R\.?', 'وسپر', text, flags=re.IGNORECASE)
-        text = re.sub(r'\bVESPER\b', 'وسپر', text, flags=re.IGNORECASE)
-        text = re.sub(r'C\s*\.\s*E\s*\.\s*L\s*\.\s*E\s*\.\s*S\s*\.\s*T\s*\.\s*E\.?', 'سلست', text, flags=re.IGNORECASE)
-        text = re.sub(r'\bCELESTE\b', 'سلست', text, flags=re.IGNORECASE)
+        text = re.sub(r'V\s*\.\s*E\s*\.\s*S\s*\.\s*P\s*\.\s*E\s*\.\s*R\.?', 'وِسپِر', text, flags=re.IGNORECASE)
+        text = re.sub(r'\bVESPER\b', 'وِسپِر', text, flags=re.IGNORECASE)
         tone_match = re.search(r'\[\s*(?:لحن|حس|tone)\s*:\s*([^\]]+)\]', text, flags=re.IGNORECASE)
         explicit_tone = ''
         if tone_match:
@@ -767,7 +765,7 @@ class TTSEngine:
                 proc.stderr,
                 module_name='gooya_worker',
                 default_level=logging.INFO,
-                json_prefix='CELESTE_LOG:',
+                json_prefix='VESPER_LOG:',
                 thread_name='GooyaStderrPump',
             )
             threading.Thread(
@@ -1077,9 +1075,9 @@ class TTSEngine:
 
     def _apply_dsp(self, pcm: np.ndarray, sample_rate: int) -> np.ndarray:
         try:
-            from Voice.AudioDSP.jarvis_dsp import CelesteAudioDSP
+            from Voice.AudioDSP.vesper_dsp import VesperAudioDSP
             if getattr(self, '_dsp', None) is None or self._dsp._sr != sample_rate:
-                self._dsp = CelesteAudioDSP(sample_rate=sample_rate)
+                self._dsp = VesperAudioDSP(sample_rate=sample_rate)
             return self._dsp.process(pcm)
         except Exception as exc:
             logger.warning('DSP processing failed (bypassing DSP): %s', exc, exc_info=True)

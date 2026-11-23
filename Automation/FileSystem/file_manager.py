@@ -1,4 +1,4 @@
-# JARVIS File Manager Module
+# V.E.S.P.E.R. File Manager Module
 import os, sys, subprocess, logging, re, hashlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -150,10 +150,10 @@ def get_file_manager() -> FileManager:
 
 if __name__ == "__main__":
     print("=" * 70)
-    print("JARVIS File Manager - Self Test")
+    print("V.E.S.P.E.R. File Manager - Self Test")
     print("=" * 70)
     fm = get_file_manager()
-    tmp_dir = Path(os.environ.get("TEMP", str(Path.home()))) / "jarvis_test"
+    tmp_dir = Path(os.environ.get("TEMP", str(Path.home()))) / "vesper_test"
     tmp_dir.mkdir(exist_ok=True)
     test_file = tmp_dir / "test_sensitive.txt"
     test_file.write_text("password=secret123\napi_key=abcdef0123456789\nnormal text here", encoding="utf-8")
@@ -163,7 +163,7 @@ if __name__ == "__main__":
     for f in r.get("findings", []):
         print(f"  - {f[0]}: {f[1]}")
     print("\n[WRITE TEST]")
-    r = fm.write_file(str(tmp_dir / "output.txt"), "Hello JARVIS!")
+    r = fm.write_file(str(tmp_dir / "output.txt"), "Hello V.E.S.P.E.R.!")
     print(f"  success={r['success']}, path={r.get('path')}")
     print("\n[READ TEST]")
     r = fm.read_file(str(tmp_dir / "output.txt"))

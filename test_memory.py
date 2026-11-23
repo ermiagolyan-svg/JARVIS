@@ -1,6 +1,7 @@
 '''Quick self-test for MemoryManager.'''
 import sys
-sys.path.insert(0, 'D:/AI/JARVIS')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from Core.Memory.memory_manager import MemoryManager
 

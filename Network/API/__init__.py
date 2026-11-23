@@ -1,1 +1,1 @@
-# JARVIS Network API package
+# V.E.S.P.E.R. Network API package

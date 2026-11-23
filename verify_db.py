@@ -1,10 +1,10 @@
 """Quick verification script for db_manager.py"""
 import sys
-sys.path.insert(0, "D:/AI/JARVIS")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from Core.Memory.db_manager import init_db, get_db_path
 import sqlite3
-from pathlib import Path
 
 # Initialize the database
 db = init_db()

@@ -1,4 +1,4 @@
-# JARVIS 4-Tier Security & Permission Layer
+# V.E.S.P.E.R. 4-Tier Security & Permission Layer
 # Manages command execution based on risk levels: SAFE, MODERATE, SENSITIVE, DANGEROUS.
 # All actions are logged to SQLite (security_audit table) and unified central logger.
 
@@ -16,8 +16,9 @@ from typing import Any, Dict, List, Optional, Tuple
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-_DB_PATH = Path(r"D:\AI\JARVIS\Data\Memory\jarvis_memory.db")
-_AUDIT_LOG_FILE = Path(r"D:\AI\JARVIS\Logs\security_audit.log")
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_DB_PATH = _PROJECT_ROOT / "Data" / "Memory" / "vesper_memory.db"
+_AUDIT_LOG_FILE = _PROJECT_ROOT / "Logs" / "security_audit.log"
 _PENDING_TIMEOUT_SECONDS = 60
 
 # ---------------------------------------------------------------------------
@@ -148,7 +149,7 @@ WHITELISTED_APPS = [
 # Security Permission Manager - Core Class
 # ---------------------------------------------------------------------------
 class SecurityPermissionManager:
-    """4-Tier Security & Permission Manager for JARVIS Automation."""
+    """4-Tier Security & Permission Manager for V.E.S.P.E.R. Automation."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -281,7 +282,7 @@ def get_permission_manager() -> SecurityPermissionManager:
 def run_self_test() -> None:
     """Run a comprehensive self-test of the 4-tier permission system."""
     print("=" * 70)
-    print("JARVIS Security Permission Manager - Self Test")
+    print("V.E.S.P.E.R. Security Permission Manager - Self Test")
     print("=" * 70)
 
     mgr = get_permission_manager()

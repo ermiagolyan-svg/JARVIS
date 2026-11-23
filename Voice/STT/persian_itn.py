@@ -1,4 +1,4 @@
-# C.E.L.E.S.T.E. / JARVIS Voice - Persian Inverse Text Normalization (ITN)
+# V.E.S.P.E.R. Voice - Persian Inverse Text Normalization (ITN)
 # Converts spoken Persian numbers to integer digits (Persian/ASCII)
 
 import re

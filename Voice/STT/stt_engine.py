@@ -1,4 +1,4 @@
-# C.E.L.E.S.T.E. / JARVIS Voice - Offline STT Engine (Shenava-Koochik + Silero VAD)
+# V.E.S.P.E.R. Voice - Offline STT Engine (Shenava-Koochik + Silero VAD)
 # 100% CPU-only speech recognition and voice activity detection using sherpa-onnx.
 
 import inspect
@@ -642,7 +642,7 @@ class STTEngine:
 
 if __name__ == '__main__':
     print('=' * 60)
-    print('JARVIS STT Engine (Shenava + Silero VAD) - Self Test')
+    print('V.E.S.P.E.R. STT Engine (Shenava + Silero VAD) - Self Test')
     print('=' * 60)
     engine = STTEngine()
     ok = engine.initialize()

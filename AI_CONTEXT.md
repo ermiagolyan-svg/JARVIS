@@ -1,11 +1,11 @@
-# AI_CONTEXT.md — C.E.L.E.S.T.E. v2.0 Architecture & Technical Context
+# AI_CONTEXT.md — V.E.S.P.E.R. Architecture & Technical Context
 
 ---
 
 # 1. System Blueprint
 
 ### 1.1 Overview & System Identity
-The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic Execution System for Tactical Engagements*), formerly JARVIS. C.E.L.E.S.T.E. is an event-driven, hybrid local/cloud tactical assistant and desktop engineering control system. The system runs locally on Windows 11 x64 (AMD Ryzen 7 9700X 8-Core / 16-Thread Processor, NVIDIA GeForce RTX 3080 10GB VRAM, 32GB DDR5-6400 RAM) and serves as an autonomous co-pilot with natural Persian and English voice interaction, full OS automation, live hardware telemetry monitoring, and secure network remote control.
+The system identity is **V.E.S.P.E.R.** (*Voice-Enabled Strategic Processing & Execution Resource* / `vesper` / `وِسپِر`). V.E.S.P.E.R. is an event-driven, hybrid local/cloud tactical assistant and desktop engineering control system. The system runs locally on Windows 11 x64 (AMD Ryzen 7 9700X 8-Core / 16-Thread Processor, NVIDIA GeForce RTX 3080 10GB VRAM, 32GB DDR5-6400 RAM) and serves as an autonomous co-pilot with natural Persian and English voice interaction, full OS automation, live hardware telemetry monitoring, and secure network remote control.
 
 ### 1.2 Tech Stack & Frameworks
 - **Core Runtime & Language:** Python 3.10+ (Current runtime environment: Python 3.14 x64 on Windows).
@@ -19,18 +19,18 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
 - **Cloud AI Fallback / Hybrid Routing:** Google Gemini API (`gemini-2.5-flash`), Anthropic Claude API (`claude-3-7-sonnet-latest`), and OpenAI ChatGPT API (`gpt-4o`).
 - **Speech-to-Text (STT):** `Shenava-Koochik-v1.0 (sherpa-onnx) + Silero VAD (CPU-only, 0 MB VRAM)` (`Data/Models/stt/shenava`, 100% CPU FastConformer CTC + Silero VAD + Persian ITN, zero GPU VRAM contention with Gemma-4-26B and Gooya).
 - **Voice Pipeline — Dual-Engine TTS:**
-  1. **Gemini Online TTS (`gemini`):** Cloud neural voice (`gemini-2.5-flash-preview-tts`), selectable voices (`Kore`, `Puck`, `Fenrir`, `Aoede`), dedicated API key (`voice.online_api_key`), automatic Persian name normalization (`"C.E.L.E.S.T.E."` to `"سلست"`), 24kHz PCM decoding, and acoustic DSP processing.
+  1. **Gemini Online TTS (`gemini`):** Cloud neural voice (`gemini-2.5-flash-preview-tts`), selectable voices (`Kore`, `Puck`, `Fenrir`, `Aoede`), dedicated API key (`voice.online_api_key`), automatic Persian name normalization (`"V.E.S.P.E.R."` to `"وِسپِر"`), 24kHz PCM decoding, and acoustic DSP processing.
   2. **Gooya Bozorg v1.5 Local TTS (`gooya`):** Local 801M Chatterbox architecture (`Reza2kn/Gooya-Bozorg-v1.5`) at `Data/Models/gooya` running in an isolated Python 3.11 subprocess worker (`Data/Models/gooya/venv`, `torch 2.6.0+cu124`, `chatterbox-tts 0.1.7`):
      - **Hybrid Precision & Stability:** Strictly offline (`HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, `TQDM_DISABLE=1`), `T3` in `bfloat16` + PyTorch `sdpa` FlashAttention, `S3Gen` & `VoiceEncoder` strictly in `float32` + TF32 (preventing `s3gen/flow.py` bf16 token/length rounding crashes), full-fidelity `cfm_timesteps=10`, pre-cached clean 24kHz mono speaker reference (`Data/Models/gooya/speaker_reference_clean.wav`), and startup CUDA kernel warmup.
      - **Low-Latency Streaming & VRAM Control:** Producer-Consumer **Dynamic Runway Scheduler** (sentence-first Persian/English segmentation with live EWMA speed/runway sizing, single-shot bypass for replies `<=115` chars, comma-preserving Persian prosody), gapless `sounddevice.OutputStream` playback (`<40ms` barge-in abort with `winsound` fallback), Windows-safe CUDA allocator fragmentation cap (`max_split_size_mb:128,garbage_collection_threshold:0.7`) keeping `VRAM reserved ~2154 MB` (conditional trim at `2450 MB`), and full Windows child PID process-tree cleanup (`taskkill /T /F`) on `unload_gooya()`.
-- **Audio DSP:** NumPy, SciPy via `CelesteAudioDSP` (real-time pitch modulation, metallic comb filtering, convolution reverb).
+- **Audio DSP:** NumPy, SciPy via `VesperAudioDSP` (real-time pitch modulation, metallic comb filtering, convolution reverb).
 - **Wake Word Detection:** PyAudio, sounddevice, RMS energy threshold gating, and sliding-window frame analysis via `WakeWordEngine`.
 - **Hardware Telemetry:** Direct NVML (`pynvml`), `nvidia-smi`, and `psutil` via `HardwareMonitor` (CPU per-core load, RAM usage, NVIDIA GPU utilization, VRAM allocation, temperature).
-- **Persistence & Storage:** SQLite3 database (`Data/Memory/jarvis_memory.db`) with Write-Ahead Logging (WAL), multithreaded support (`check_same_thread=False`), storing `conversations`, `user_facts`, `preferences`, and `security_audit`.
+- **Persistence & Storage:** SQLite3 database (`Data/Memory/vesper_memory.db`) with Write-Ahead Logging (WAL), multithreaded support (`check_same_thread=False`), storing `conversations`, `user_facts`, `preferences`, and `security_audit`.
 
 ### 1.3 Primary Architectural Patterns
 - **Multi-Process Hybrid Architecture:** Headless Python backend service running as a resilient background daemon alongside an independent .NET 8 WPF holographic client communicating over REST and WebSockets on port `8765`.
-- **Single-Instance Mutex Enforcement:** Win32 Named Mutex (`Global\JARVIS_CORE_SINGLE_INSTANCE_MUTEX`) paired with socket port checks to guarantee a single daemon instance.
+- **Single-Instance Mutex Enforcement:** Win32 Named Mutex (`Global\VESPER_CORE_SINGLE_INSTANCE_MUTEX`) paired with socket port checks to guarantee a single daemon instance.
 - **Shared-Engine Orchestration:** Memory-resident shared singleton instances of STT, WakeWord, TTS, and DSP managed by `VoiceOrchestrator` to prevent duplicate VRAM/RAM allocations.
 - **Dynamic VRAM Lifecycle Management:** Automatic unloading of local Gooya weights (with full Windows child process-tree termination) upon mode switch to Gemini or after inference (`gooya_auto_unload`), returning 100% of GPU memory to Gemma-4-26B MoE.
 - **4-Tier Security Gatekeeper:** Deterministic rule-based command inspection classifying execution requests into `SAFE`, `MODERATE`, `SENSITIVE`, or `DANGEROUS` prior to router dispatch.
@@ -41,16 +41,16 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
 # 2. Module & File Registry
 
 ### 2.1 Core & Daemon Orchestration
-- `[Core/jarvis_main.py]` -> Master system orchestrator coordinating the 9-step initialization pipeline, mutex lifecycle, and Uvicorn runtime on port 8765 -> `JarvisMasterService`, `_acquire_single_instance_mutex()`.
-- `[Core/jarvis_watchdog.py]` -> Out-of-process health supervisor executing periodic heartbeat pings against unauthenticated `/api/v1/health` and managing silent auto-restart cycles -> `run_watchdog(test_once: bool)`.
+- `[Core/vesper_main.py]` -> Master system orchestrator coordinating the 9-step initialization pipeline, mutex lifecycle, and Uvicorn runtime on port 8765 -> `VesperMasterService`, `_acquire_single_instance_mutex()`.
+- `[Core/vesper_watchdog.py]` -> Out-of-process health supervisor executing periodic heartbeat pings against unauthenticated `/api/v1/health` and managing silent auto-restart cycles -> `run_watchdog(test_once: bool)`.
 - `[Core/Config/config_loader.py]` -> Thread-safe central configuration manager loading, validating, and mutating `Configuration/config.json` -> `ConfigManager`, `get_config()`, `load_config()`, `save_config()`.
-- `[Core/Logger/logger.py]` -> Unified rotational file and console logging subsystem with `turn_id` correlation, subprocess stream pumping, and in-memory ring buffer for API consumption -> `JarvisLogger`, `get_logger()`, `get_recent_logs()`, `turn_context()`.
-- `[Installer/start_jarvis_hidden.vbs]` -> VBScript wrapper launching the Python daemon via `pythonw.exe` completely concealed without creating visible console windows.
+- `[Core/Logger/logger.py]` -> Unified rotational file and console logging subsystem with `turn_id` correlation, subprocess stream pumping, and in-memory ring buffer for API consumption -> `VesperLogger`, `get_logger()`, `get_recent_logs()`, `turn_context()`.
+- `[Installer/start_vesper_hidden.vbs]` -> VBScript wrapper launching the Python daemon via `pythonw.exe` completely concealed without creating visible console windows.
 
 ### 2.2 Memory & Persistence
 - `[Core/Memory/db_manager.py]` -> Low-level SQLite database connection manager handling WAL mode, schema initialization, multithreading (`check_same_thread=False`), table migrations, and row factories -> `DatabaseManager`, `get_db()`, `init_db()`.
 - `[Core/Memory/memory_manager.py]` -> High-level memory controller managing conversational history, persistent factual memories in SQLite `user_facts`, user preferences, and audit retention cleanup -> `MemoryManager`, `get_all_facts()`, `set_fact()`, `delete_fact()`, `get_stats()`.
-- `[Data/Memory/jarvis_memory.db]` -> Primary SQLite database store containing tables for `conversations`, `user_facts`, `preferences`, and `security_audit`.
+- `[Data/Memory/vesper_memory.db]` -> Primary SQLite database store containing tables for `conversations`, `user_facts`, `preferences`, and `security_audit`.
 
 ### 2.3 AI Engine & LLM Routing
 - `[Core/ModelManager/llamacpp_manager.py]` -> Process supervisor for `llama-server.exe` featuring Gemma-4-26B-A4B MoE command building (`-ot`, `-fa on`, `-ctk q8_0 -ctv q8_0`) and VRAM port 8080 adoption logic -> `LlamaCppManager` (alias `ModelManager`).
@@ -63,12 +63,12 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
 - `[Voice/STT/stt_engine.py]` -> Shenava-Koochik-v1.0 (sherpa-onnx) + Silero VAD (CPU-only, 0 MB VRAM) speech-to-text and VAD engine with Persian ITN -> `STTEngine`.
 - `[Voice/TTS/tts_engine.py]` -> Dual-engine neural TTS router (Gemini Online + Gooya Bozorg v1.5) featuring Dynamic Runway Producer-Consumer pipelining, sentence-first Persian/English chunking, gapless `sounddevice` continuous audio playback (`_ContinuousAudioPlayer` + `winsound` fallback), instant `stop_speaking` barge-in, clean Gemini fallback, and Windows process-tree `unload_gooya()` -> `TTSEngine`, `_ContinuousAudioPlayer`.
 - `[Voice/TTS/gooya_worker.py]` -> Isolated Python 3.11 warm CUDA worker running Gooya Bozorg v1.5 in strictly offline hybrid precision (`t3` in `bf16` + SDPA, `s3gen` & `ve` in `fp32` + TF32), cached fp32 speaker conditioning, startup CUDA kernel warmup, comma-preserving Persian normalization, adaptive `cfm_timesteps`, and VRAM peak trimming (<2.45 GB) -> `GooyaWorker`.
-- `[Voice/AudioDSP/jarvis_dsp.py]` -> Acoustic DSP filter chain executing real-time pitch shifting, metallic comb filtering, and synthetic reverb convolution -> `CelesteAudioDSP` (alias `JarvisAudioDSP`).
+- `[Voice/AudioDSP/vesper_dsp.py]` -> Acoustic DSP filter chain executing real-time pitch shifting, metallic comb filtering, and synthetic reverb convolution -> `VesperAudioDSP`.
 
 ### 2.5 Network & API Gateway
 - `[Network/Authentication/auth_manager.py]` -> Security manager enforcing RFC 1918 LAN restrictions, Bearer token authentication, PIN-based pairing, and brute-force lockout -> `NetworkAuthManager`, `AuthResult`, `PairingResult`.
 - `[Network/API/rest_server.py]` -> FastAPI application on unified port `8765` exposing REST routes for telemetry, SQLite memory facts CRUD, dual-engine voice configuration, security confirmations, unified logs, and chat -> `create_rest_app()`, `get_master_token()`, `validate_request_token()`.
-- `[Network/WebSocket/ws_server.py]` -> Dual-endpoint WebSocket manager on unified port `8765` handling binary PCM stream ingestion on `/ws/lumia` and real-time JSON HUD telemetry on `/ws/desktop` -> `JarvisWebSocketManager`.
+- `[Network/WebSocket/ws_server.py]` -> Dual-endpoint WebSocket manager on unified port `8765` handling binary PCM stream ingestion on `/ws/lumia` and real-time JSON HUD telemetry on `/ws/desktop` -> `VesperWebSocketManager`.
 
 ### 2.6 Automation, Security & OS Control
 - `[Automation/automation_router.py]` -> Role-based command dispatcher executing validated operations across applications, filesystem, and system controls -> `AutomationRouter`, `Role`, `get_automation_router()`.
@@ -83,8 +83,8 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
 - `[Desktop/Monitoring/hardware_monitor.py]` -> Hardware telemetry daemon sampling CPU per-core load, RAM usage, storage volume capacities, and NVIDIA GPU metrics via NVML -> `HardwareMonitor`, `CpuMetrics`, `GpuMetrics`, `RamMetrics`, `DiskMetrics`, `TelemetrySnapshot`.
 - `[Desktop/UI/App.xaml]` / `[Desktop/UI/App.xaml.cs]` -> WPF application entry point configuring global exception handling and application lifecycle.
 - `[Desktop/UI/MainWindow.xaml]` / `[Desktop/UI/MainWindow.xaml.cs]` -> Holographic Iron Man HUD user interface featuring an interactive Arc Reactor, 3D cosmic star sphere, live Persian chat, audio visualizer, and management panels.
-- `[Desktop/UI/Models/JarvisModels.cs]` -> C# data contracts and JSON serialization DTOs matching backend REST endpoints and WebSocket frames.
-- `[Desktop/UI/Services/JarvisBackendClient.cs]` -> Asynchronous C# HTTP and WebSocket communication client handling auto-reconnection, token loading, and backend service calls -> `JarvisBackendClient`.
+- `[Desktop/UI/Models/]` -> C# data contracts and JSON serialization DTOs matching backend REST endpoints and WebSocket frames (Desktop UI - migrating in Phase 3).
+- `[Desktop/UI/Services/]` -> Asynchronous C# HTTP and WebSocket communication client handling auto-reconnection, token loading, and backend service calls (Desktop UI - migrating in Phase 3).
 
 ---
 
@@ -94,8 +94,8 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
 ```json
 {
   "system": {
-    "project_name": "CELESTE",
-    "assistant_name": "C.E.L.E.S.T.E.",
+    "project_name": "VESPER",
+    "assistant_name": "V.E.S.P.E.R.",
     "version": "2.0.0",
     "language": "fa-IR",
     "log_level": "INFO",
@@ -138,7 +138,7 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
     "gemini_model": "gemini-2.5-flash-preview-tts",
     "gemini_voice_name": "Kore",
     "gooya_model_dir": "Data/Models/gooya",
-    "gooya_reference_audio": "D:\\AI\\JARVIS\\Data\\Models\\gooya\\speaker_reference_clean.wav",
+    "gooya_reference_audio": "Data/Models/gooya/speaker_reference_clean.wav",
     "gooya_exaggeration": 0.6,
     "gooya_cfg_weight": 0.7,
     "gooya_precision": "bf16",
@@ -157,7 +157,7 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
     "gooya_use_continuous_audio": true,
     "stt_model_dir": "Data/Models/stt/shenava",
     "stt_force_cpu": true,
-    "wake_word": "hey_jarvis",
+    "wake_word": "vesper",
     "wake_threshold": 0.15,
     "dsp_pitch_semitones": 0.0,
     "dsp_metallic_mix": 0.0,
@@ -174,7 +174,7 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
     "heartbeat_interval": 10
   },
   "memory": {
-    "db_path": "Data/Memory/jarvis_memory.db",
+    "db_path": "Data/Memory/vesper_memory.db",
     "max_context_messages": 20,
     "retention_days": 365
   },
@@ -196,7 +196,7 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
 }
 ```
 
-### 3.2 Persistent Database Relational Schema (`Data/Memory/jarvis_memory.db`)
+### 3.2 Persistent Database Relational Schema (`Data/Memory/vesper_memory.db`)
 - **`conversations`:**
   - `id`: INTEGER PRIMARY KEY AUTOINCREMENT
   - `session_id`: TEXT NOT NULL
@@ -262,7 +262,7 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
                   │         └── SENSITIVE / DANGEROUS ──> Post to Confirmation Queue
                   │
                   ▼
-       Cleaned Persian Spoken Text ("C.E.L.E.S.T.E." -> "سلست")
+       Cleaned Persian Spoken Text ("V.E.S.P.E.R." -> "وِسپِر")
                   │
                   ▼
        [VoiceOrchestrator FSM -> SPEAKING]
@@ -273,7 +273,7 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
             └── Gooya Bozorg v1.5 (Hybrid BF16 T3 + FP32/TF32 S3Gen + Dynamic Runway Pipelining)
                   │
                   ▼
-       [CelesteAudioDSP] ──> Pitch Shift + Comb Filter + Convolution Reverb
+       [VesperAudioDSP] ──> Pitch Shift + Comb Filter + Convolution Reverb
                   │
                   ▼
        [Gapless Continuous Playback (sounddevice OutputStream + winsound fallback, <40ms barge-in)]
@@ -285,11 +285,11 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
 ### 4.2 Network & Remote Audio Stream Ingestion
 1. **Connection & Authentication:** Client initiates WebSocket connection to `/ws/lumia` or `/ws/desktop` on unified port `8765`. Middleware verifies LAN RFC 1918 IP address and checks authorization Bearer token.
 2. **Audio Streaming:** Lumia client streams raw 16kHz 16-bit mono PCM chunks.
-3. **Dynamic Source Routing:** `JarvisWebSocketManager` sets `active_mic = "network"` and invokes `VoiceOrchestrator.ingest_lumia_audio_chunk(pcm_bytes)`.
+3. **Dynamic Source Routing:** `VesperWebSocketManager` sets `active_mic = "network"` and invokes `VoiceOrchestrator.ingest_lumia_audio_chunk(pcm_bytes)`.
 4. **Failover:** If Lumia client disconnects or times out (25 seconds heartbeat loss), `active_mic` resets to `"mic"`, seamlessly reactivating the local soundcard without restarting the pipeline.
 
 ### 4.3 Desktop WPF HUD Telemetry & Control Loop
-1. **Connection:** `JarvisBackendClient` loads local token and PIN from `Configuration/auth_token.json`, establishes a persistent WebSocket connection to `/ws/desktop` on port `8765`.
+1. **Connection:** Desktop client loads local token and PIN from `Configuration/auth_token.json`, establishes a persistent WebSocket connection to `/ws/desktop` on port `8765`.
 2. **Live State Synchronization:** `ws_server.py` broadcasts `hud_update` frames containing RMS audio levels, voice states, live hardware telemetry (sampled via `HardwareMonitor`), and pending security confirmations.
 3. **UI Dispatching:** `MainWindow.xaml.cs` processes incoming frames on the UI thread, driving the Arc Reactor rotation speed, visualizer bars, and pending action dialogues.
 
@@ -335,8 +335,8 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
 ### 5.6 Expanding Desktop WPF User Interface
 - **File:** `Desktop/UI/MainWindow.xaml` / `Desktop/UI/MainWindow.xaml.cs`
   - Add new `<TabItem>` components within the holographic management panel.
-  - Wire control event handlers through `JarvisBackendClient`.
-- **File:** `Desktop/UI/Models/JarvisModels.cs`
+  - Wire control event handlers through desktop backend client.
+- **File:** `Desktop/UI/Models/` (Desktop UI contracts - Phase 3)
   - Define new C# classes and deserialization contracts matching any modified or newly introduced backend payloads.
 
 ---
@@ -344,7 +344,7 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
 # 6. Current State & Completed Milestones
 
 ### 6.1 Architectural Milestones Completed
-- **Multi-Instance Guard:** Named Mutex `Global\JARVIS_CORE_SINGLE_INSTANCE_MUTEX` is active and prevents duplicate core instances.
+- **Multi-Instance Guard:** Named Mutex `Global\VESPER_CORE_SINGLE_INSTANCE_MUTEX` is active and prevents duplicate core instances.
 - **Single-Port Unification:** REST API and WebSockets operate on single unified port `8765`.
 - **Target Runtime LLM:** Gemma-4-26B-A4B-IT (`gemma-4-26B-A4B-it-UD-IQ4_XS.gguf`) integrated with MoE tensor offloading (`-ot`), FlashAttention, 16k Q8 KV cache, and automatic port 8080 adoption.
 - **Dual-Engine TTS + Phase 1.5 Low-Latency Gooya Pipeline:** Fully operational Gemini Online TTS + Gooya Bozorg v1.5 Local TTS with hybrid BF16/FP32+TF32 stability, offline execution, pre-cached 24kHz clean speaker reference, Dynamic Runway Producer-Consumer chunking (stall=0.0ms, VRAM reserved ~2154 MB), gapless `sounddevice` playback, and Windows process-tree VRAM release.
@@ -356,8 +356,8 @@ The system identity is **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic E
 All structural gaps identified during previous system audits have been resolved and verified:
 1. **Telemetry Live Integration:** `Network/API/rest_server.py` endpoint `GET /api/v1/telemetry` and WebSocket `hud_update` frames are connected to `Desktop.Monitoring.hardware_monitor.HardwareMonitor`, providing real-time CPU, GPU, VRAM, and RAM metrics.
 2. **TTS Non-Blocking Playback & Async Event Loop:** `Voice/TTS/tts_engine.py` executes audio synthesis and gapless streaming playback in background worker threads, eliminating caller blocking and avoiding Uvicorn async event loop collisions.
-3. **MemoryManager Return Value Contract:** Startup methods in `Core/Memory/memory_manager.py` return boolean status (`True`), resolving initialization checks in `Core/jarvis_main.py`.
+3. **MemoryManager Return Value Contract:** Startup methods in `Core/Memory/memory_manager.py` return boolean status (`True`), resolving initialization checks in `Core/vesper_main.py`.
 4. **STT Shutdown Method Alias:** `STTEngine` exposes `close()` as an alias to `shutdown()`, ensuring clean daemon termination.
 5. **Memory Facts Fallback ID Resolution:** REST endpoint `DELETE /api/v1/memory/facts/{fact_id_or_key}` supports both integer SQLite primary keys and string keys with direct database deletion.
-6. **Watchdog Unauthenticated Health Check:** `Core/jarvis_watchdog.py` queries `/api/v1/health` instead of token-protected endpoints, preventing false 401 restarts.
+6. **Watchdog Unauthenticated Health Check:** `Core/vesper_watchdog.py` queries `/api/v1/health` instead of token-protected endpoints, preventing false 401 restarts.
 7. **Gooya BF16 S3Gen Crash & VRAM Spill Fixed:** Isolated `t3` to `bfloat16` while keeping `s3gen`/`ve` in `float32` + TF32, added Windows-safe CUDA allocator cap + Dynamic Runway chunking (VRAM reserved reduced from 2962 MB to ~2154 MB, stall=0.0ms, zero fallback).

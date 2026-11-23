@@ -1,4 +1,4 @@
-# JARVIS Network Authentication & Device Pairing Manager
+# V.E.S.P.E.R. Network Authentication & Device Pairing Manager
 # Restricts API access to private LAN IPs and manages token-based authentication.
 
 import ipaddress
@@ -17,9 +17,10 @@ from datetime import datetime, timedelta
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-_CONFIG_DIR = Path(r"D:\AI\JARVIS\Configuration")
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_CONFIG_DIR = _PROJECT_ROOT / "Configuration"
 _AUTH_TOKEN_FILE = _CONFIG_DIR / "auth_token.json"
-_LOG_FILE = Path(r"D:\AI\JARVIS\Logs\network_auth.log")
+_LOG_FILE = _PROJECT_ROOT / "Logs" / "network_auth.log"
 _TOKEN_EXPIRY_HOURS = 24
 _PIN_LENGTH = 6
 
@@ -379,7 +380,7 @@ def get_auth_manager() -> NetworkAuthManager:
 def run_self_test() -> None:
     """Run a comprehensive self-test of the network authentication manager."""
     print("=" * 70)
-    print("JARVIS Network Authentication & Device Pairing - Self Test")
+    print("V.E.S.P.E.R. Network Authentication & Device Pairing - Self Test")
     print("=" * 70)
 
     mgr = get_auth_manager()
@@ -428,7 +429,7 @@ def run_self_test() -> None:
 
     # --- Phase 4: Device Pairing ---
     print("\n[PHASE 4 - DEVICE PAIRING]")
-    devices = ["Laptop-01", "Phone-JARVIS", "Smart-TV", "Tablet-Admin"]
+    devices = ["Laptop-01", "Phone-VESPER", "Smart-TV", "Tablet-Admin"]
     pairing_results = []
     for device in devices:
         pr = mgr.pair_device(device)
