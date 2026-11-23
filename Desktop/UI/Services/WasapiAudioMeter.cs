@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace JarvisDesktop.Services;
+namespace VesperDesktop.Services;
 
 /// <summary>
 /// Lightweight, zero-dependency Windows Core Audio (WASAPI) playback meter.

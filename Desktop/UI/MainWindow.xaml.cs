@@ -12,10 +12,10 @@ using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Shell;
 using System.Windows.Threading;
-using JarvisDesktop.Models;
-using JarvisDesktop.Services;
+using VesperDesktop.Models;
+using VesperDesktop.Services;
 
-namespace JarvisDesktop;
+namespace VesperDesktop;
 
 public class ChatDisplayItem
 {
@@ -56,9 +56,9 @@ public class LogDisplayItem
 
 public partial class MainWindow : Window
 {
-    private const string ConfigFilePath = @"D:\AI\JARVIS\Configuration\config.json";
+    private static readonly string ConfigFilePath = System.IO.Path.Combine(VesperBackendClient.ResolveProjectRoot(), "Configuration", "config.json");
 
-    private readonly JarvisBackendClient _client;
+    private readonly VesperBackendClient _client;
     private readonly WasapiAudioMeter _audioMeter = new();
     private readonly Stopwatch _frameWatch = new();
     private double _lastRenderSec;
@@ -127,7 +127,7 @@ public partial class MainWindow : Window
         LstConversation.ItemsSource = _chatMessages;
         LstLogs.ItemsSource = _visibleLogs;
 
-        _client = new JarvisBackendClient();
+        _client = new VesperBackendClient();
         _client.OnHudUpdate += HandleHudUpdateFromWs;
         _client.OnLiveLogEntry += HandleLiveLogFromWs;
         _client.OnConnectionStateChanged += HandleWsConnectionState;
@@ -327,7 +327,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            TxtCloudConfigResult.Text = "[WARN] Backend did not return a response. Make sure jarvis_main.py is running.";
+            TxtCloudConfigResult.Text = "[WARN] Backend did not return a response. Make sure vesper_main.py is running.";
         }
     }
 

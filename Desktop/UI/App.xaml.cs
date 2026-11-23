@@ -1,6 +1,6 @@
 ﻿using System.Windows;
 
-namespace JarvisDesktop;
+namespace VesperDesktop;
 
 public partial class App : Application
 {

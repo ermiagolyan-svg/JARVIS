@@ -1,12 +1,12 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace JarvisDesktop.Models;
+namespace VesperDesktop.Models;
 
 public class PairRequest
 {
     [JsonPropertyName("device_name")]
-    public string DeviceName { get; set; } = "JarvisDesktopPC";
+    public string DeviceName { get; set; } = "VesperDesktopPC";
 
     [JsonPropertyName("pin")]
     public string Pin { get; set; } = string.Empty;

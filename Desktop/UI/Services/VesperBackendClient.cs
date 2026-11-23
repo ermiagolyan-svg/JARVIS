@@ -5,12 +5,12 @@ using System.Net.Http.Json;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using JarvisDesktop.Models;
+using VesperDesktop.Models;
 using Microsoft.Win32;
 
-namespace JarvisDesktop.Services;
+namespace VesperDesktop.Services;
 
-public class JarvisBackendClient : IDisposable
+public class VesperBackendClient : IDisposable
 {
     private readonly HttpClient _http;
     private ClientWebSocket? _ws;
@@ -36,9 +36,46 @@ public class JarvisBackendClient : IDisposable
         PropertyNameCaseInsensitive = true
     };
 
-    public JarvisBackendClient(string host = "127.0.0.1", int port = 8765, string projectRoot = @"D:\AI\JARVIS")
+    public static string ResolveProjectRoot()
     {
-        _projectRoot = projectRoot;
+        try
+        {
+            string? current = AppContext.BaseDirectory;
+            while (!string.IsNullOrEmpty(current))
+            {
+                if (File.Exists(Path.Combine(current, "Configuration", "config.json")) ||
+                    File.Exists(Path.Combine(current, "Core", "vesper_main.py")))
+                {
+                    return current;
+                }
+                var parent = Directory.GetParent(current);
+                if (parent == null || parent.FullName == current) break;
+                current = parent.FullName;
+            }
+
+            current = Directory.GetCurrentDirectory();
+            while (!string.IsNullOrEmpty(current))
+            {
+                if (File.Exists(Path.Combine(current, "Configuration", "config.json")) ||
+                    File.Exists(Path.Combine(current, "Core", "vesper_main.py")))
+                {
+                    return current;
+                }
+                var parent = Directory.GetParent(current);
+                if (parent == null || parent.FullName == current) break;
+                current = parent.FullName;
+            }
+        }
+        catch
+        {
+            // fallback below
+        }
+        return @"D:\AI\VESPER";
+    }
+
+    public VesperBackendClient(string host = "127.0.0.1", int port = 8765, string? projectRoot = null)
+    {
+        _projectRoot = projectRoot ?? ResolveProjectRoot();
         BaseHttpUrl = $"http://{host}:{port}";
         BaseWsUrl = $"ws://{host}:{port}";
         _http = new HttpClient
@@ -136,7 +173,7 @@ public class JarvisBackendClient : IDisposable
         return false;
     }
 
-    public async Task<bool> PairWithPinAsync(string pin, string deviceName = "JarvisDesktopPC")
+    public async Task<bool> PairWithPinAsync(string pin, string deviceName = "VesperDesktopPC")
     {
         try
         {
@@ -499,7 +536,7 @@ public class JarvisBackendClient : IDisposable
 
     // Windows Startup helper matching Stage 6.2 (HKCU Run Registry)
     private const string RunRegPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string RunValueName = "JARVIS_AI_System";
+    private const string RunValueName = "VESPER_AI_System";
 
     public bool IsWindowsStartupEnabled()
     {
@@ -520,7 +557,7 @@ public class JarvisBackendClient : IDisposable
             if (key == null) return false;
             if (enabled)
             {
-                string vbsPath = Path.Combine(_projectRoot, "Installer", "start_jarvis_hidden.vbs");
+                string vbsPath = Path.Combine(_projectRoot, "Installer", "start_vesper_hidden.vbs");
                 key.SetValue(RunValueName, $"wscript.exe \"{vbsPath}\"");
             }
             else

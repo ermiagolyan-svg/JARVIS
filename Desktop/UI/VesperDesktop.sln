@@ -2,7 +2,7 @@
 # Visual Studio Version 17
 VisualStudioVersion = 17.8.34330.188
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JarvisDesktop", "JarvisDesktop.csproj", "{8B6F2A10-4D3C-4E9B-9A21-7C5D8E3F1A01}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VesperDesktop", "VesperDesktop.csproj", "{8B6F2A10-4D3C-4E9B-9A21-7C5D8E3F1A01}"
 EndProject
 Global
 GlobalSection(SolutionConfigurationPlatforms) = preSolution

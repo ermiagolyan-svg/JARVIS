@@ -1,4 +1,4 @@
-namespace JarvisDesktop.Controls;
+namespace VesperDesktop.Controls;
 
 /// <summary>
 /// Compact offline Natural Earth 110m simplified country borders, world capitals (Tehran HQ + global hubs),
