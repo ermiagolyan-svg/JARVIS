@@ -426,12 +426,16 @@ class VoiceOrchestrator:
                     logger.info('Voice turn ignored (empty STT transcript after %.1fms | vad_ms=%.1f stt_ms=%.1f)', stt_ms, vad_ms, stt_infer_ms)
                     return
 
+                # Broadcast transcribed user prompt to HUD immediately
+                self._emit_hud_message({'role': 'user', 'text': text, 'turn_id': tid, 'source': 'voice'})
+
                 dm = self._resolve_dialogue_manager()
                 t_llm = time.perf_counter()
                 response_text = dm.chat(text)
                 llm_ms = round((time.perf_counter() - t_llm) * 1000.0, 1)
 
                 self._route_actions(response_text)
+                self._emit_hud_message({'role': 'assistant', 'text': response_text, 'turn_id': tid, 'source': 'voice'})
 
                 if self._muted:
                     logger.info('Voice turn skipping TTS (muted) | stt=%.1fms llm=%.1fms', stt_ms, llm_ms)

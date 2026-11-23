@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:controls="clr-namespace:JarvisDesktop.Controls"
-        Title="C.E.L.E.S.T.E. // CYBERNETIC ENGINE FOR LOGIC, ENGINEERING &amp; STRATEGIC TACTICAL EXECUTION"
+        Title="V.E.S.P.E.R. // VOICE-ENABLED STRATEGIC PROCESSING &amp; EXECUTION RUNTIME"
         Height="920" Width="1640" MinHeight="720" MinWidth="1200"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
@@ -127,7 +127,7 @@
     <!-- Outer Window Frame Border -->
     <Border x:Name="OuterFrameBorder" BorderBrush="{DynamicResource CyanBorderDimBrush}" BorderThickness="1">
         <Grid ClipToBounds="True">
-            <!-- ==================== LAYER 0: FULL-SCREEN CELESTE COSMIC STAR SPHERE ==================== -->
+            <!-- ==================== LAYER 0: FULL-SCREEN VESPER COSMIC STAR SPHERE ==================== -->
             <Grid Background="{DynamicResource BackdropRadialBrush}" MouseDown="CosmicBackdrop_MouseDown">
                 <!-- Subtle Ambient Radial Halo -->
                 <Ellipse x:Name="AmbientHalo" Width="680" Height="680" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
@@ -146,7 +146,7 @@
 
                 <!-- Bottom Center Holographic Identity Caption -->
                 <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,68" IsHitTestVisible="False">
-                    <TextBlock x:Name="TxtCenterStateTitle" Text="C  ·  E  ·  L  ·  E  ·  S  ·  T  ·  E"
+                    <TextBlock x:Name="TxtCenterStateTitle" Text="V  ·  E  ·  S  ·  P  ·  E  ·  R"
                                Foreground="{DynamicResource CyanSecondaryBrush}" FontSize="21" FontWeight="Bold"
                                HorizontalAlignment="Center" Opacity="0.95"/>
                     <TextBlock x:Name="TxtReactorSubtitle"
@@ -177,8 +177,8 @@
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,20,0">
                         <Border Width="4" Height="28" Background="{DynamicResource CyanGradientBrush}" CornerRadius="2" Margin="0,0,12,0"/>
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="C.E.L.E.S.T.E. COMMAND CORE" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="14.5" FontWeight="Bold"/>
-                            <TextBlock Text="CYBER-ICE TACTICAL HUD // WORKSTATION NODE" Foreground="{DynamicResource CyanPrimaryBrush}" FontSize="9.5" FontWeight="SemiBold" Opacity="0.85"/>
+                            <TextBlock Text="V.E.S.P.E.R. COMMAND CORE" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="14.5" FontWeight="Bold"/>
+                            <TextBlock Text="TACTICAL HUD // WORKSTATION NODE" Foreground="{DynamicResource CyanPrimaryBrush}" FontSize="9.5" FontWeight="SemiBold" Opacity="0.85"/>
                         </StackPanel>
                     </StackPanel>
 
@@ -385,7 +385,7 @@
 
                     <!-- Bottom Action Buttons -->
                     <StackPanel Grid.Row="2" Margin="0,12,0,0">
-                        <Button Content="&#x26A1;  WAKE TRIGGER (CELESTE)" Style="{StaticResource HoloSuccessButtonStyle}" FontSize="13" Padding="14,11" Margin="0,0,0,10" Click="BtnWakeTrigger_Click"/>
+                        <Button Content="&#x26A1;  WAKE TRIGGER (VESPER)" Style="{StaticResource HoloSuccessButtonStyle}" FontSize="13" Padding="14,11" Margin="0,0,0,10" Click="BtnWakeTrigger_Click"/>
                         <Button Content="&#x21BB;  SYNC TELEMETRY SENSORS" Style="{StaticResource HoloButtonStyle}" FontSize="13" Padding="14,11" Click="BtnRefreshTelemetry_Click"/>
                     </StackPanel>
                 </Grid>
@@ -413,7 +413,7 @@
                     <DockPanel Grid.Row="0" Margin="2,0,2,14">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Ellipse Width="7" Height="7" Fill="{DynamicResource CyanSecondaryBrush}" Margin="0,0,8,0"/>
-                            <TextBlock Text="C.E.L.E.S.T.E. CONTROL DECK" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="13.5" FontWeight="Bold"/>
+                            <TextBlock Text="V.E.S.P.E.R. CONTROL DECK" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="13.5" FontWeight="Bold"/>
                         </StackPanel>
                         <Button Content="✕" Style="{StaticResource WindowControlButtonStyle}" HorizontalAlignment="Right" Click="BtnToggleRightDrawer_Click"/>
                     </DockPanel>
@@ -551,7 +551,7 @@
                                     </Border>
 
                                     <Button Click="BtnApplyVoiceConfig_Click" Content="APPLY VOICE &amp; ENGINE CONFIGURATION" Margin="0,0,0,8" Style="{StaticResource HoloButtonStyle}"/>
-                                    <Button Click="BtnTestVoice_Click" Content="🔊  TEST CELESTE VOICE SYNTHESIS" Style="{StaticResource HoloSuccessButtonStyle}"/>
+                                    <Button Click="BtnTestVoice_Click" Content="🔊  TEST VESPER VOICE SYNTHESIS" Style="{StaticResource HoloSuccessButtonStyle}"/>
                                     <TextBlock FontSize="11.5" Foreground="{DynamicResource CyanSecondaryBrush}" Margin="0,10,0,0" Text="" TextWrapping="Wrap" x:Name="TxtVoiceConfigResult"/>
                                 </StackPanel>
                             </ScrollViewer>
@@ -734,7 +734,7 @@
                                             <TextBlock Text="SUBSYSTEM DIAGNOSTICS" Foreground="{DynamicResource CyanSecondaryBrush}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
                                             <Button Content="RUN CHECK" Style="{StaticResource HoloSuccessButtonStyle}" HorizontalAlignment="Right" Padding="12,4" Click="BtnRunDiagnostics_Click"/>
                                         </DockPanel>
-                                        <TextBlock x:Name="TxtDiagnosticsOutput" Text="Ready to verify C.E.L.E.S.T.E. subsystems." Foreground="{DynamicResource TextPrimaryBrush}" FontFamily="Consolas" FontSize="11.5" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="TxtDiagnosticsOutput" Text="Ready to verify V.E.S.P.E.R. subsystems." Foreground="{DynamicResource TextPrimaryBrush}" FontFamily="Consolas" FontSize="11.5" TextWrapping="Wrap"/>
                                     </StackPanel>
                                 </Border>
 
@@ -897,7 +897,7 @@
                     <DockPanel Grid.Row="0" Margin="0,0,0,10">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Ellipse Width="8" Height="8" Fill="{DynamicResource CyanSecondaryBrush}" Margin="0,0,10,0"/>
-                            <TextBlock Text="C.E.L.E.S.T.E. DIALOGUE STREAM  //  ترمینال گفتگوی تاکتیکی"
+                            <TextBlock Text="V.E.S.P.E.R. DIALOGUE STREAM  //  ترمینال گفتگوی تاکتیکی"
                                        Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="Bold" FontSize="13"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -961,22 +961,144 @@
                         </ListBox>
                     </Border>
 
-                    <Grid Grid.Row="2" Margin="0,12,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="140"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBox x:Name="TxtChatInput" Grid.Column="0" Style="{StaticResource HoloTextBoxStyle}"
-                                 FlowDirection="RightToLeft" FontSize="13.5" KeyDown="TxtChatInput_KeyDown"/>
-                        <Button Grid.Column="1" Content="ارسال فرمان  ➤" Style="{StaticResource HoloSuccessButtonStyle}" Margin="10,0,0,0" Click="BtnSendChat_Click"/>
-                    </Grid>
+                    <!-- ==================== GEMINI-STYLE UNIFIED PILL INPUT BAR ==================== -->
+                    <Border x:Name="ChatInputPillBorder" Grid.Row="2" Margin="0,12,0,0"
+                            CornerRadius="24" MinHeight="50" Padding="8,4,14,4"
+                            Background="{DynamicResource BgCardBrush}"
+                            BorderBrush="{DynamicResource CyanBorderDimBrush}"
+                            BorderThickness="1.2">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Left Action Cluster: Circular Send & Mic Buttons -->
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- Circular Send Button -->
+                                <Button x:Name="BtnSendChat" Width="38" Height="38"
+                                        Background="{DynamicResource BtnDefaultBgBrush}"
+                                        BorderBrush="{DynamicResource CyanBorderDimBrush}"
+                                        BorderThickness="1"
+                                        Click="BtnSendChat_Click"
+                                        ToolTip="ارسال فرمان (Enter)"
+                                        Cursor="Hand">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="sendBd"
+                                                    Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    CornerRadius="19">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="sendBd" Property="Opacity" Value="0.85"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="sendBd" Property="Opacity" Value="0.65"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                    <Path x:Name="SendIcon"
+                                          Data="M 2.01,21 L 23,12 L 2.01,3 L 2,10 L 17,12 L 2,14 Z"
+                                          Fill="{DynamicResource TextMutedBrush}"
+                                          Stretch="Uniform"
+                                          Width="16" Height="16"
+                                          RenderTransformOrigin="0.5,0.5"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Path.RenderTransform>
+                                            <RotateTransform Angle="-30"/>
+                                        </Path.RenderTransform>
+                                    </Path>
+                                </Button>
+
+                                <!-- Circular Mic Button -->
+                                <Button x:Name="BtnChatMic" Width="38" Height="38"
+                                        Margin="6,0,0,0"
+                                        Background="{DynamicResource BtnDefaultBgBrush}"
+                                        BorderBrush="{DynamicResource CyanBorderDimBrush}"
+                                        BorderThickness="1"
+                                        Click="BtnChatMic_Click"
+                                        ToolTip="میکروفون (F4) — کلیک برای شروع/توقف شنود"
+                                        Cursor="Hand">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="micBd"
+                                                    Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    CornerRadius="19">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="micBd" Property="Opacity" Value="0.85"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="micBd" Property="Opacity" Value="0.65"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                    <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Path x:Name="ChatMicIcon"
+                                              Data="M 12,14 C 13.66,14 15,12.66 15,11 L 15,5 C 15,3.34 13.66,2 12,2 C 10.34,2 9,3.34 9,5 L 9,11 C 9,12.66 10.34,14 12,14 Z M 17.3,11 C 17.3,14 14.76,16.1 12,16.1 C 9.24,16.1 6.7,14 6.7,11 L 5,11 C 5,14.41 7.72,17.23 11,17.72 L 11,21 L 13,21 L 13,17.72 C 16.28,17.23 19,14.41 19,11 L 17.3,11 Z"
+                                              Fill="{DynamicResource CyanSecondaryBrush}"
+                                              Stretch="Uniform"
+                                              Width="16" Height="16"/>
+                                        <Ellipse x:Name="ChatMicDot" Width="4" Height="4"
+                                                 Fill="{DynamicResource CyanSecondaryBrush}"
+                                                 HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                 Margin="0,-2,-2,0" Visibility="Collapsed"/>
+                                        <TextBlock x:Name="TxtChatMicLabel" Visibility="Collapsed"/>
+                                    </Grid>
+                                </Button>
+                            </StackPanel>
+
+                            <!-- Right/Main Area (for RTL Persian text) -->
+                            <Grid Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
+                                <TextBlock x:Name="TxtChatPlaceholder"
+                                           Text="پیام به وسپر بنویسید یا F4 را بزنید..."
+                                           FlowDirection="RightToLeft"
+                                           VerticalAlignment="Center"
+                                           Margin="8,0,8,0"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           Opacity="0.45"
+                                           IsHitTestVisible="False"
+                                           FontSize="13.5"/>
+                                <TextBox x:Name="TxtChatInput"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Foreground="{DynamicResource TextPrimaryBrush}"
+                                         CaretBrush="{DynamicResource CyanSecondaryBrush}"
+                                         SelectionBrush="#55E78A4E"
+                                         FlowDirection="RightToLeft"
+                                         FontSize="13.5"
+                                         VerticalContentAlignment="Center"
+                                         Padding="6,8,6,8"
+                                         KeyDown="TxtChatInput_KeyDown"
+                                         TextChanged="TxtChatInput_TextChanged">
+                                    <TextBox.Template>
+                                        <ControlTemplate TargetType="TextBox">
+                                            <Border Background="{TemplateBinding Background}" BorderThickness="0">
+                                                <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </TextBox.Template>
+                                </TextBox>
+                            </Grid>
+                        </Grid>
+                    </Border>
                 </Grid>
             </Border>
 
             <!-- Bottom Edge Floating Dock + Status Ticker -->
             <Grid x:Name="BottomDockBar" VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Margin="24,0,24,16" IsHitTestVisible="True">
                 <Border Background="{DynamicResource BgDockPillBrush}" BorderBrush="{DynamicResource CyanBorderDimBrush}" BorderThickness="1" CornerRadius="10" Padding="12,5" HorizontalAlignment="Left" VerticalAlignment="Center">
-                    <TextBlock x:Name="TxtStatusBar" Text="C.E.L.E.S.T.E. Cyber-Ice Core Initialized"
+                    <TextBlock x:Name="TxtStatusBar" Text="V.E.S.P.E.R. Tactical Core Initialized"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11" FontWeight="SemiBold"/>
                 </Border>
 

@@ -113,6 +113,15 @@ class JarvisWebSocketManager:
             except RuntimeError:
                 loop = None
 
+        if loop is None or loop.is_closed():
+            with self._sub_lock:
+                for sub in self._log_subscribers.values():
+                    l = sub.get('loop')
+                    if l is not None and not l.is_closed():
+                        loop = l
+                        self._event_loop = loop
+                        break
+
         if loop is not None and not loop.is_closed():
             try:
                 loop.call_soon_threadsafe(asyncio.create_task, self.broadcast_hud_update())
@@ -137,7 +146,12 @@ class JarvisWebSocketManager:
                 self._schedule_hud_broadcast()
 
         def _on_vo_message(msg_payload: Dict[str, Any]) -> None:
-            self._last_message = dict(msg_payload)
+            self._last_message = {
+                'role': str(msg_payload.get('role', 'user')),
+                'text': str(msg_payload.get('text', '')),
+                'turn_id': str(msg_payload.get('turn_id', '')),
+                'source': str(msg_payload.get('source', 'voice')),
+            }
             self._schedule_hud_broadcast()
 
         if hasattr(vo, 'set_hud_callbacks'):
@@ -747,7 +761,7 @@ class JarvisWebSocketManager:
                         else:
                             raw_tts = (getattr(dm, 'last_raw_tts_response', None) or ai_response).strip()
 
-                        self._last_message = {'role': 'assistant', 'text': ai_response, 'turn_id': tid}
+                        self._last_message = {'role': 'assistant', 'text': ai_response, 'turn_id': tid, 'source': 'desktop'}
                         self._state = 'MUTED' if self._muted else 'IDLE'
                         _logger.info(
                             'Turn LLM done [WS] | llm_ms=%.1fms | reply_chars=%d | tts_dispatched=%s | reply=%s',
@@ -764,9 +778,9 @@ class JarvisWebSocketManager:
                         llm_ms = round((time.perf_counter() - t0) * 1000.0, 1)
                         self._state = 'MUTED' if self._muted else 'IDLE'
                         _logger.exception('text_command AI failure after %.1fms: %s', llm_ms, e)
-                        self._last_message = {'role': 'assistant', 'text': f'خطا در ارتباط با هسته پردازشی سلست: {e}', 'turn_id': tid}
+                        self._last_message = {'role': 'assistant', 'text': f'خطا در ارتباط با هسته پردازشی سلست: {e}', 'turn_id': tid, 'source': 'desktop'}
             else:
-                self._last_message = {'role': 'user', 'text': text}
+                self._last_message = {'role': 'user', 'text': text, 'source': 'desktop'}
             await self.broadcast_hud_update()
 
         else:

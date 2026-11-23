@@ -426,10 +426,51 @@ public class HudUpdateMessage
             return el.GetString() ?? string.Empty;
         if (el.ValueKind == JsonValueKind.Object)
         {
-            if (el.TryGetProperty("text", out var t) && t.ValueKind == JsonValueKind.String)
-                return t.GetString() ?? string.Empty;
-            if (el.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
-                return c.GetString() ?? string.Empty;
+            foreach (var prop in el.EnumerateObject())
+            {
+                if ((string.Equals(prop.Name, "text", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(prop.Name, "content", StringComparison.OrdinalIgnoreCase)) &&
+                    prop.Value.ValueKind == JsonValueKind.String)
+                {
+                    return prop.Value.GetString() ?? string.Empty;
+                }
+            }
+        }
+        return string.Empty;
+    }
+
+    public string ExtractLastMessageRole()
+    {
+        if (!LastMessage.HasValue) return string.Empty;
+        var el = LastMessage.Value;
+        if (el.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in el.EnumerateObject())
+            {
+                if (string.Equals(prop.Name, "role", StringComparison.OrdinalIgnoreCase) &&
+                    prop.Value.ValueKind == JsonValueKind.String)
+                {
+                    return prop.Value.GetString() ?? string.Empty;
+                }
+            }
+        }
+        return string.Empty;
+    }
+
+    public string ExtractLastMessageTurnId()
+    {
+        if (!LastMessage.HasValue) return string.Empty;
+        var el = LastMessage.Value;
+        if (el.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in el.EnumerateObject())
+            {
+                if (string.Equals(prop.Name, "turn_id", StringComparison.OrdinalIgnoreCase) &&
+                    prop.Value.ValueKind == JsonValueKind.String)
+                {
+                    return prop.Value.GetString() ?? string.Empty;
+                }
+            }
         }
         return string.Empty;
     }

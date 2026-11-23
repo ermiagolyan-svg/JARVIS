@@ -23,8 +23,8 @@ CONFIG_PATH = PROJECT_ROOT / "Configuration" / "config.json"
 # Default configuration values (used for automatic restoration of missing keys)
 DEFAULT_CONFIG: Dict[str, Any] = {
     "system": {
-        "project_name": "CELESTE",
-        "assistant_name": "C.E.L.E.S.T.E.",
+        "project_name": "VESPER",
+        "assistant_name": "V.E.S.P.E.R.",
         "version": "2.0.0",
         "language": "fa-IR",
         "log_level": "INFO",

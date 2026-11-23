@@ -89,7 +89,9 @@ public partial class MainWindow : Window
     private string _currentActiveMic = "local";
     private string? _activePendingActionId;
     private bool _testRedAlertMode;
-    private string _lastSeenWsMessage = string.Empty;
+    private readonly HashSet<string> _seenMessageSignatures = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Queue<string> _seenMessageQueue = new();
+    private const int MaxTrackedMessageSignatures = 300;
     private DateTime _lastWsHudUpdateUtc = DateTime.MinValue;
 
     private static readonly JsonSerializerOptions TelemetryJsonOpts = new() { PropertyNameCaseInsensitive = true };
@@ -108,7 +110,8 @@ public partial class MainWindow : Window
     private readonly SolidColorBrush _amberGlitchBrush = new((Color)ColorConverter.ConvertFromString("#D8A657"));
     private readonly SolidColorBrush _crimsonCoreBrush = new((Color)ColorConverter.ConvertFromString("#EA6962"));
     private readonly SolidColorBrush _crimsonBrightBrush = new((Color)ColorConverter.ConvertFromString("#F2594B"));
-    private readonly SolidColorBrush _crimsonDeepBrush = new((Color)ColorConverter.ConvertFromString("#C14A4A"));
+    private readonly SolidColorBrush _crimsonDeepBrush = new((Color)ColorConverter.ConvertFromString("#C14A4A"));
+    private readonly SolidColorBrush _obsidianCardBrush = new((Color)ColorConverter.ConvertFromString("#141617"));
 
     // Theme 2 (Transparent LCD White/Black High-Contrast) Brushes
     private readonly SolidColorBrush _lcdPitchBlackBrush = new((Color)ColorConverter.ConvertFromString("#000000"));
@@ -151,7 +154,43 @@ public partial class MainWindow : Window
             }
         };
 
-        Loaded += MainWindow_Loaded;
+        Loaded += MainWindow_Loaded;
+        Loaded += (_, _) =>
+        {
+            UpdateTerminalMicButtonState(_isLightLcdTheme ? _lcdPitchBlackBrush : _quantumCyanBrush);
+            TxtChatInput_TextChanged(this, null!);
+            if (ChatInputPillBorder != null && TxtChatInput != null)
+            {
+                TxtChatInput.GotKeyboardFocus += (_, _) =>
+                {
+                    if (ChatInputPillBorder != null && !_currentState.Contains("LISTEN") && !_currentState.Contains("THINK") && !_isMuted)
+                    {
+                        ChatInputPillBorder.BorderBrush = _isLightLcdTheme ? _lcdPitchBlackBrush : _quantumCyanBrush;
+                    }
+                };
+                TxtChatInput.LostKeyboardFocus += (_, _) =>
+                {
+                    if (ChatInputPillBorder != null && !_currentState.Contains("LISTEN") && !_currentState.Contains("THINK") && !_isMuted)
+                    {
+                        ChatInputPillBorder.BorderBrush = (Brush)FindResource("CyanBorderDimBrush");
+                    }
+                };
+                ChatInputPillBorder.MouseEnter += (_, _) =>
+                {
+                    if (ChatInputPillBorder != null && !_currentState.Contains("LISTEN") && !_currentState.Contains("THINK") && !_isMuted && !TxtChatInput.IsKeyboardFocused)
+                    {
+                        ChatInputPillBorder.BorderBrush = _isLightLcdTheme ? _lcdDeepCarbonBrush : _iceBlueBrush;
+                    }
+                };
+                ChatInputPillBorder.MouseLeave += (_, _) =>
+                {
+                    if (ChatInputPillBorder != null && !_currentState.Contains("LISTEN") && !_currentState.Contains("THINK") && !_isMuted && !TxtChatInput.IsKeyboardFocused)
+                    {
+                        ChatInputPillBorder.BorderBrush = (Brush)FindResource("CyanBorderDimBrush");
+                    }
+                };
+            }
+        };
         Closed += (_, _) =>
         {
             DetachRenderLoop();
@@ -172,7 +211,8 @@ public partial class MainWindow : Window
         _crimsonDeepBrush.Freeze();
         _lcdPitchBlackBrush.Freeze();
         _lcdDeepCarbonBrush.Freeze();
-        _lcdDarkCobaltBrush.Freeze();
+        _lcdDarkCobaltBrush.Freeze();
+        _obsidianCardBrush.Freeze();
     }
 
     // ==================== CLOUD AI & WEB SEARCH CONFIG (config.json) ====================
@@ -759,18 +799,31 @@ public partial class MainWindow : Window
                 catch { }
             }
 
-            var lastText = msg.ExtractLastMessageText();
-            if (!string.IsNullOrWhiteSpace(lastText) && lastText != _lastSeenWsMessage && lastText != "wake_trigger")
-            {
-                _lastSeenWsMessage = lastText;
-                string sender = "V.E.S.P.E.R.";
-                if (msg.LastMessage.HasValue && msg.LastMessage.Value.ValueKind == JsonValueKind.Object &&
-                    msg.LastMessage.Value.TryGetProperty("role", out var roleEl) &&
-                    string.Equals(roleEl.GetString(), "user", StringComparison.OrdinalIgnoreCase))
+            var lastText = msg.ExtractLastMessageText()?.Trim();
+            var role = msg.ExtractLastMessageRole()?.Trim().ToLowerInvariant() ?? string.Empty;
+            var turnId = msg.ExtractLastMessageTurnId()?.Trim();
+
+            if (!string.IsNullOrWhiteSpace(lastText))
+            {
+                if (role == "system" || string.Equals(lastText, "wake_trigger", StringComparison.OrdinalIgnoreCase))
                 {
-                    sender = "USER";
+                    return;
                 }
-                AppendChatMessage(sender, lastText);
+
+                if (TryRecordMessageSignature(turnId, role, lastText))
+                {
+                    string sender = string.Equals(role, "user", StringComparison.OrdinalIgnoreCase) ? "USER" : "V.E.S.P.E.R.";
+                    AppendChatMessage(sender, lastText);
+                }
+            }
+            {
+
+
+
+
+
+
+
             }
         });
     }
@@ -860,7 +913,7 @@ public partial class MainWindow : Window
 
     private void UpdateTerminalMicButtonState(Brush activeAccent)
     {
-        if (BtnChatMic == null || ChatMicDot == null || TxtChatMicLabel == null) return;
+        if (BtnChatMic == null) return;
 
         bool isListening = !_isMuted &&
             (_currentState.Contains("LISTEN", StringComparison.OrdinalIgnoreCase) ||
@@ -870,38 +923,105 @@ public partial class MainWindow : Window
             (_currentState.Contains("THINK", StringComparison.OrdinalIgnoreCase) ||
              _currentState.Contains("PROCESS", StringComparison.OrdinalIgnoreCase));
         bool isSpeaking = !_isMuted &&
-            _currentState.Contains("SPEAK", StringComparison.OrdinalIgnoreCase);
+            _currentState.Contains("SPEAK", StringComparison.OrdinalIgnoreCase);
+
+        Brush neutralBorder = (Brush)FindResource("CyanBorderDimBrush");
+
+        if (_isMuted)
+        {
+            BtnChatMic.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#28EA6962"));
+            BtnChatMic.BorderBrush = _crimsonCoreBrush;
+            BtnChatMic.ToolTip = "میکروفون بیصداست — کلیک برای فعالسازی";
+            if (ChatMicIcon != null) ChatMicIcon.Fill = _crimsonCoreBrush;
+            if (ChatMicDot != null) ChatMicDot.Fill = _crimsonCoreBrush;
+            if (ChatInputPillBorder != null) ChatInputPillBorder.BorderBrush = neutralBorder;
+            if (TxtChatMicLabel != null) TxtChatMicLabel.Text = "فعال‌سازی میکروفون";
+            TxtChatStatus.Text = "MUTED";
+            return;
+        }
+
+        if (isListening)
+        {
+            BtnChatMic.Background = _crimsonCoreBrush;
+            BtnChatMic.BorderBrush = _crimsonBrightBrush;
+            BtnChatMic.ToolTip = "در حال شنود... (کلیک یا F4 برای توقف)";
+            if (ChatMicIcon != null) ChatMicIcon.Fill = _isLightLcdTheme ? Brushes.White : _obsidianCardBrush;
+            if (ChatMicDot != null) ChatMicDot.Fill = _crimsonBrightBrush;
+            if (ChatInputPillBorder != null) ChatInputPillBorder.BorderBrush = _crimsonCoreBrush;
+            if (TxtChatMicLabel != null) TxtChatMicLabel.Text = "در حال شنود...";
+            TxtChatStatus.Text = "LISTENING";
+            return;
+        }
+
+        if (isThinking)
+        {
+            BtnChatMic.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#28D8A657"));
+            BtnChatMic.BorderBrush = _amberGlitchBrush;
+            BtnChatMic.ToolTip = "در حال پردازش...";
+            if (ChatMicIcon != null) ChatMicIcon.Fill = _amberGlitchBrush;
+            if (ChatMicDot != null) ChatMicDot.Fill = _amberGlitchBrush;
+            if (ChatInputPillBorder != null) ChatInputPillBorder.BorderBrush = _amberGlitchBrush;
+            if (TxtChatMicLabel != null) TxtChatMicLabel.Text = "در حال پردازش...";
+            TxtChatStatus.Text = "THINKING";
+            return;
+        }
+
+        BtnChatMic.Background = (Brush)FindResource("BtnDefaultBgBrush");
+        BtnChatMic.BorderBrush = neutralBorder;
+        BtnChatMic.ToolTip = "میکروفون (F4) — کلیک برای شروع/توقف شنود";
+        if (ChatMicIcon != null) ChatMicIcon.Fill = activeAccent;
+        if (ChatMicDot != null) ChatMicDot.Fill = activeAccent;
+        if (ChatInputPillBorder != null && (TxtChatInput == null || !TxtChatInput.IsKeyboardFocused))
+        {
+            ChatInputPillBorder.BorderBrush = neutralBorder;
+        }
+        if (TxtChatMicLabel != null) TxtChatMicLabel.Text = "میکروفون (F4)";
+        TxtChatStatus.Text = isSpeaking ? "SPEAKING" : "ONLINE";
+    }
+
+    /*
+    {
+        bool isListening = false, isThinking = false, isSpeaking = false;
+        Brush activeAccent = Brushes.Transparent;
+        if (false)
+        {
+        TxtChatStatus.Text = isSpeaking ? "SPEAKING" : "ONLINE";
+        return;
 
         if (_isMuted)
         {
-            BtnChatMic.Style = (Style)FindResource("HoloDangerButtonStyle");
-            ChatMicDot.Fill = _crimsonCoreBrush;
-            TxtChatMicLabel.Text = "\u0641\u0639\u0627\u0644\u200C\u0633\u0627\u0632\u06CC \u0645\u06CC\u06A9\u0631\u0648\u0641\u0648\u0646";
+
+            // dead code removed
+
             TxtChatStatus.Text = "MUTED";
         }
         else if (isListening)
         {
-            BtnChatMic.Style = (Style)FindResource("HoloDangerButtonStyle");
-            ChatMicDot.Fill = _crimsonCoreBrush;
-            TxtChatMicLabel.Text = "\u062F\u0631 \u062D\u0627\u0644 \u0634\u0646\u0648\u062F...";
+
+            // dead code removed
+
             TxtChatStatus.Text = "LISTENING";
         }
         else if (isThinking)
         {
-            BtnChatMic.Style = (Style)FindResource("HoloButtonStyle");
-            ChatMicDot.Fill = _amberGlitchBrush;
-            TxtChatMicLabel.Text = "\u062F\u0631 \u062D\u0627\u0644 \u067E\u0631\u062F\u0627\u0632\u0634...";
+
+            // dead code removed
+
             TxtChatStatus.Text = "THINKING";
         }
         else
         {
-            BtnChatMic.Style = (Style)FindResource("HoloButtonStyle");
-            ChatMicDot.Fill = activeAccent;
-            TxtChatMicLabel.Text = "\u0645\u06CC\u06A9\u0631\u0648\u0641\u0648\u0646 (F4)";
+
+            // dead code removed
+
             TxtChatStatus.Text = isSpeaking ? "SPEAKING" : "ONLINE";
         }
     }
 
+    }
+
+    */
+
     private void ApplyTelemetry(TelemetryModel t)
     {
         BarCpuLoad.Value = Math.Clamp(t.CpuPercent, 0, 100);
@@ -985,6 +1105,27 @@ public partial class MainWindow : Window
         }
     }
 
+    private bool TryRecordMessageSignature(string? turnId, string role, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        string cleanText = text.Trim();
+        string cleanRole = (role ?? string.Empty).Trim().ToLowerInvariant();
+        string key = !string.IsNullOrWhiteSpace(turnId) && turnId != "-"
+            ? $"{turnId}:{cleanRole}:{cleanText}"
+            : $"{cleanRole}:{cleanText}";
+
+        if (_seenMessageSignatures.Contains(key)) return false;
+
+        _seenMessageSignatures.Add(key);
+        _seenMessageQueue.Enqueue(key);
+        while (_seenMessageQueue.Count > MaxTrackedMessageSignatures)
+        {
+            var old = _seenMessageQueue.Dequeue();
+            _seenMessageSignatures.Remove(old);
+        }
+        return true;
+    }
+
     private void AppendChatMessage(string sender, string content)
     {
         bool isUser = string.Equals(sender, "USER", StringComparison.OrdinalIgnoreCase);
@@ -1102,20 +1243,48 @@ public partial class MainWindow : Window
         }
     }
 
+    private void TxtChatInput_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        bool hasText = !string.IsNullOrWhiteSpace(TxtChatInput.Text);
+        if (TxtChatPlaceholder != null)
+        {
+            TxtChatPlaceholder.Visibility = hasText ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        if (BtnSendChat != null && SendIcon != null)
+        {
+            Brush activeAccent = _isLightLcdTheme ? _lcdPitchBlackBrush : _quantumCyanBrush;
+            if (hasText)
+            {
+                BtnSendChat.Background = activeAccent;
+                BtnSendChat.BorderBrush = activeAccent;
+                SendIcon.Fill = _isLightLcdTheme ? Brushes.White : _obsidianCardBrush;
+            }
+            else
+            {
+                BtnSendChat.Background = (Brush)FindResource("BtnDefaultBgBrush");
+                BtnSendChat.BorderBrush = (Brush)FindResource("CyanBorderDimBrush");
+                SendIcon.Fill = (Brush)FindResource("TextMutedBrush");
+            }
+        }
+    }
+
     private async Task SubmitChatInputAsync()
     {
         string text = TxtChatInput.Text.Trim();
         if (string.IsNullOrWhiteSpace(text)) return;
 
         TxtChatInput.Text = string.Empty;
+        TryRecordMessageSignature(null, "user", text);
         AppendChatMessage("USER", text);
         TxtChatStatus.Text = "PROCESSING...";
 
         var reply = await _client.SendChatAsync(text, "desktop");
         if (reply != null && !string.IsNullOrWhiteSpace(reply.EffectiveText))
         {
-            _lastSeenWsMessage = reply.EffectiveText;
-            AppendChatMessage("V.E.S.P.E.R.", reply.EffectiveText);
+            string replyText = reply.EffectiveText.Trim();
+            TryRecordMessageSignature(reply.TurnId, "assistant", replyText);
+            AppendChatMessage("V.E.S.P.E.R.", replyText);
             TxtChatStatus.Text = "ONLINE";
         }
         else

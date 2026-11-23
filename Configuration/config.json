@@ -1,7 +1,7 @@
 {
     "system": {
-        "project_name": "CELESTE",
-        "assistant_name": "C.E.L.E.S.T.E.",
+        "project_name": "VESPER",
+        "assistant_name": "V.E.S.P.E.R.",
         "version": "2.0.0",
         "language": "fa-IR",
         "log_level": "INFO",
@@ -94,7 +94,7 @@
         "vad_num_threads": 1,
         "vad_threshold": 0.35,
         "vad_min_silence_duration": 0.65,
-        "vad_min_speech_duration": 0.20,
+        "vad_min_speech_duration": 0.2,
         "vad_max_speech_duration": 15.0,
         "vad_window_size": 512,
         "vad_buffer_size_seconds": 60,

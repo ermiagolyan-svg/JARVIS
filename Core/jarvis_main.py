@@ -212,7 +212,7 @@ class JarvisMasterService:
         """Step 9: Print readiness report (dry_run) or start uvicorn (production)."""
         if self._dry_run:
             self.logger.info("=" * 60)
-            self.logger.info("C.E.L.E.S.T.E. Dry-Run Readiness Report")
+            self.logger.info("V.E.S.P.E.R. Dry-Run Readiness Report")
             self.logger.info("=" * 60)
             steps = [
                 ("1. Core", "Config + Unified Logger + Memory"),
@@ -237,7 +237,7 @@ class JarvisMasterService:
             else:
                 ready = False
             if ready:
-                self.logger.info("سیستم سلست آماده به کار است")
+                self.logger.info("سیستم وسپر آماده به کار است")
             else:
                 self.logger.warning("TTS not yet ready — health watchdog will retry")
 
@@ -318,7 +318,7 @@ class JarvisMasterService:
             self._llm_server_thread.join(timeout=5)
             self.logger.info("LLM server thread joined")
 
-        self.logger.info("C.E.L.E.S.T.E. shutdown complete")
+        self.logger.info("V.E.S.P.E.R. shutdown complete")
         sys.exit(0)
 
     # --- Health Watchdog ---
@@ -341,7 +341,7 @@ class JarvisMasterService:
     def run(self) -> None:
         """Entry point: initialize and start the service."""
         if not _acquire_single_instance_mutex():
-            self.logger.error("Another C.E.L.E.S.T.E. / JARVIS instance is already running. Exiting.")
+            self.logger.error("Another V.E.S.P.E.R. / JARVIS instance is already running. Exiting.")
             sys.exit(1)
 
         try:
@@ -352,7 +352,7 @@ class JarvisMasterService:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="C.E.L.E.S.T.E. MasterService")
+    parser = argparse.ArgumentParser(description="V.E.S.P.E.R. MasterService")
     parser.add_argument("--dry-run", action="store_true", help="Run readiness check only")
     args = parser.parse_args()
 

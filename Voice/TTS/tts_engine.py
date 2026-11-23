@@ -354,6 +354,8 @@ class TTSEngine:
         text = re.sub(r'<action>.*?</action>', '', text, flags=re.DOTALL)
         text = re.sub(r'<fact>.*?</fact>', '', text, flags=re.DOTALL)
         text = re.sub(r'\[Action.*?\]', '', text)
+        text = re.sub(r'V\s*\.\s*E\s*\.\s*S\s*\.\s*P\s*\.\s*E\s*\.\s*R\.?', 'وسپر', text, flags=re.IGNORECASE)
+        text = re.sub(r'\bVESPER\b', 'وسپر', text, flags=re.IGNORECASE)
         text = re.sub(r'C\s*\.\s*E\s*\.\s*L\s*\.\s*E\s*\.\s*S\s*\.\s*T\s*\.\s*E\.?', 'سلست', text, flags=re.IGNORECASE)
         text = re.sub(r'\bCELESTE\b', 'سلست', text, flags=re.IGNORECASE)
         tone_match = re.search(r'\[\s*(?:لحن|حس|tone)\s*:\s*([^\]]+)\]', text, flags=re.IGNORECASE)
@@ -1688,10 +1690,10 @@ if __name__ == '__main__':
     print(f'Initialization: OK | Engine Mode: {status["engine_mode"]} | ContinuousAudio: {status["continuous_audio_available"]}')
     assert status['initialized'] is True
 
-    test_raw = 'سلام [لحن: شاد و پرانرژی] من C.E.L.E.S.T.E. هستم! <think>thought</think><think>unclosed'
+    test_raw = 'سلام [لحن: شاد و پرانرژی] من V.E.S.P.E.R. هستم! <think>thought</think><think>unclosed'
     tone, clean = engine.clean_text_for_tts(test_raw)
     print(f'Clean text: "{clean}" | Tone: "{tone}"')
-    assert 'سلست' in clean and '<think>' not in clean and 'unclosed' not in clean
+    assert 'وسپر' in clean and '<think>' not in clean and 'unclosed' not in clean
     assert tone == 'شاد و پرانرژی'
 
     # Test 1: Short text (<=115 chars) stays single-shot for 100% prosody
@@ -1757,7 +1759,7 @@ if __name__ == '__main__':
     engine._synthesize_gemini = lambda text, tone, cfg: (
         engine._apply_dsp(np.zeros(24000, dtype=np.float32), 24000), 24000
     )
-    pcm, sr = engine.synthesize('سلست آماده است.')
+    pcm, sr = engine.synthesize('وسپر آماده است.')
     assert pcm is not None and len(pcm) == 24000 and sr == 24000
     engine._synthesize_gemini = original_gemini
 

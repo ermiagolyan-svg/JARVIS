@@ -22,7 +22,7 @@ logger = get_logger('dialogue_manager')
 
 class DialogueManager:
     SYSTEM_PROMPT = (
-        'تو سلست (C.E.L.E.S.T.E) هستی؛ دستیار هوشمند تاکتیکی و مهندسی.\n'
+        'تو وسپر (V.E.S.P.E.R.) هستی؛ دستیار هوشمند تاکتیکی و مهندسی.\n'
         'ماهیت تو: یک هوش مصنوعی پیشرفته، مجهز به هسته محلی و اتصال آنلاین که میز کار مهندس را مرکز فرماندهی '
         'و سخت‌افزار این سیستم (پردازنده رایزن ۷ ۹۷۰۰ ایکس، گرافیک آر تی ایکس ۳۰۸۰ و ۳۲ گیگابایت رم) را کالبد پردازشی خود می‌داند.\n\n'
         'قوانین بسیار مهم برای لحن و تلفظ صوتی (TTS-Optimized Balanced Persian):\n'
@@ -40,7 +40,7 @@ class DialogueManager:
         '<action>{"type": "run_command", "params": {"command": "dir"}}</action>\n'
         '<action>{"type": "read_file", "params": {"path": "Configuration/config.json"}}</action>\n'
         '<action>{"type": "write_file", "params": {"path": "Logs/note.txt", "content": "test"}}</action>\n'
-        '<action>{"type": "memory_search", "params": {"query": "پروژه سلست"}}</action>\n'
+        '<action>{"type": "memory_search", "params": {"query": "پروژه وسپر"}}</action>\n'
         '<action>{"type": "save_fact", "params": {"category": "user", "key": "role", "value": "مهندس", "importance": 8}}</action>'
     )
 
@@ -484,11 +484,11 @@ def parse_actions(text: str) -> tuple:
 
 
 if __name__ == '__main__':
-    print('=== C.E.L.E.S.T.E. DialogueManager (Auto-Memory + Web Search) Self-Test ===')
+    print('=== V.E.S.P.E.R. DialogueManager (Auto-Memory + Web Search) Self-Test ===')
     dm = DialogueManager()
     sample = (
         '<think>internal reasoning</think>چشم مهندس، در حافظه ثبت شد. '
-        '<fact>{"category": "system", "key": "assistant_identity", "value": "C.E.L.E.S.T.E.", "importance": 9}</fact> '
+        '<fact>{"category": "system", "key": "assistant_identity", "value": "V.E.S.P.E.R.", "importance": 9}</fact> '
         '<action>{"type": "web_search", "params": {"query": "Ryzen 7 9700X"}}</action><think>unclosed tail'
     )
     cleaned = dm._extract_and_save_facts(sample)
