@@ -488,7 +488,7 @@ class MemoryCreateRequest(BaseModel):
 # FastAPI App Factory
 # ---------------------------------------------------------------------------
 def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
-    app = FastAPI(title="C.E.L.E.S.T.E. REST & WS API", version="1.0.0")
+    app = FastAPI(title="V.E.S.P.E.R. REST & WS API", version="2.0.0")
     app.state.voice_orchestrator = voice_orchestrator
 
     @app.middleware("http")
@@ -522,11 +522,11 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
 
     @app.get("/api/v1/health", tags=["health"])
     async def api_health():
-        return {"status": "ok", "healthy": True, "service": "C.E.L.E.S.T.E. REST API", "version": "1.0.0"}
+        return {"status": "ok", "healthy": True, "service": "V.E.S.P.E.R. REST API", "version": "1.0.0"}
 
     @app.get("/health", tags=["health"])
     async def api_health_alias():
-        return {"status": "ok", "healthy": True, "service": "C.E.L.E.S.T.E. REST API", "version": "1.0.0"}
+        return {"status": "ok", "healthy": True, "service": "V.E.S.P.E.R. REST API", "version": "1.0.0"}
 
     # --- Pairing ---
     @app.post("/api/v1/pair", tags=["pairing"])
@@ -592,6 +592,16 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
         else:
             mem_count = len(_memory_store)
 
+        eff_state = ws_state.get('state', 'IDLE')
+        vo = getattr(app.state, 'voice_orchestrator', None)
+        if eff_state == 'IDLE' and vo is not None and hasattr(vo, 'get_state'):
+            try:
+                vo_name = vo.get_state().name
+                if vo_name in ('LISTENING', 'THINKING', 'SPEAKING', 'MUTED'):
+                    eff_state = vo_name
+            except Exception:
+                pass
+
         return {
             "service": "JARVIS REST API",
             "version": "1.0.0",
@@ -600,7 +610,7 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
             "memory_count": mem_count,
             "pending_security": len([s for s in _pending_security if s.get("status") == "pending"]),
             "uptime_seconds": int(time.time() - _START_TIME),
-            "state": ws_state.get("state", "IDLE"),
+            "state": eff_state,
             "model_loaded": llm_online or bool(ws_state.get("model_loaded", True)),
             "model_name": target_model,
             "lumia_connected": bool(ws_state.get("lumia_connected", False)),
@@ -684,12 +694,12 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
                     if dm.llm_client and dm.llm_client.get_health_status():
                         reply_text = dm.chat(user_message)
                     else:
-                        reply_text = f"پاسخ تست سلست: {user_message}"
+                        reply_text = f"پاسخ تست وسپر: {user_message}"
                 else:
-                    reply_text = f"پاسخ تست سلست: {user_message}"
+                    reply_text = f"پاسخ تست وسپر: {user_message}"
             except Exception as e:
                 _logger.exception("Chat turn error: %s", e)
-                reply_text = f"خطا در ارتباط با هسته پردازشی سلست: {e}"
+                reply_text = f"خطا در ارتباط با هسته پردازشی وسپر: {e}"
             finally:
                 llm_ms = round((time.perf_counter() - t0) * 1000.0, 1)
 
@@ -1185,7 +1195,7 @@ def _run_self_test() -> bool:
     r_tel = client.get("/api/v1/telemetry", headers=headers)
     _check("GET /telemetry", r_tel, 200)
     print(f"  [INFO] Live Telemetry Snapshot: {r_tel.json()}")
-    r_chat = client.post("/api/v1/chat", json={"text": "سلام سلست"}, headers=headers)
+    r_chat = client.post("/api/v1/chat", json={"text": "سلام وسپر"}, headers=headers)
     _check("POST /chat (C# text + spoken_response)", r_chat, 200)
     assert "spoken_response" in r_chat.json(), "Missing spoken_response!"
     _check("POST /voice/mute", client.post("/api/v1/voice/mute", json={"muted": True}, headers=headers), 200)
@@ -1211,4 +1221,4 @@ def _run_self_test() -> bool:
 
 if __name__ == "__main__":
     if _run_self_test():
-        print("[OK] C.E.L.E.S.T.E. REST API & Telemetry 100% synchronized with C# Desktop UI.")
+        print("[OK] V.E.S.P.E.R. REST API & Telemetry 100% synchronized with C# Desktop UI.")

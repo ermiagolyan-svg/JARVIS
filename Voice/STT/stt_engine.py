@@ -117,47 +117,128 @@ def open_resilient_stream(
     target_sr: int = 16000,
     callback: Any = None,
 ) -> Tuple[Any, int, Optional[int]]:
-    # Opens resilient sounddevice InputStream, falling back across sample rates and default device.
+    # Opens resilient sounddevice InputStream, validating and falling back across candidate devices,
+    # host APIs (WASAPI/DirectSound/MME), channel modes, and sample rates.
     import sounddevice as sd
 
-    devices = sd.query_devices()
-    dev_info = devices[device_idx] if (device_idx is not None and 0 <= device_idx < len(devices)) else None
-    dev_default_sr = int(dev_info.get('default_samplerate', 16000)) if dev_info else 16000
-
-    attempts: List[Tuple[Optional[int], int]] = [(device_idx, target_sr)]
-    if dev_default_sr != target_sr:
-        attempts.append((device_idx, dev_default_sr))
-
     try:
-        default_dev_idx = sd.default.device[0]
-    except Exception:
-        default_dev_idx = None
+        devices = sd.query_devices()
+        hostapis = sd.query_hostapis()
+    except Exception as exc:
+        raise RuntimeError(f'Failed to query sound devices: {exc}')
 
-    if default_dev_idx is not None and default_dev_idx != device_idx and 0 <= default_dev_idx < len(devices):
-        attempts.append((default_dev_idx, target_sr))
-        try:
-            def_sr = int(devices[default_dev_idx].get('default_samplerate', 16000))
-            if def_sr != target_sr:
-                attempts.append((default_dev_idx, def_sr))
-        except Exception:
-            pass
+    def is_api(hostapi_idx: int, api_name_substr: str) -> bool:
+        if 0 <= hostapi_idx < len(hostapis):
+            return api_name_substr.lower() in hostapis[hostapi_idx].get('name', '').lower()
+        return False
+
+    candidate_devices: List[int] = []
+
+    # 1. First: device_idx (e.g., mapped WASAPI device)
+    if device_idx is not None and isinstance(device_idx, int) and 0 <= device_idx < len(devices):
+        if devices[device_idx].get('max_input_channels', 0) > 0:
+            candidate_devices.append(device_idx)
+
+    # 2. Second: Windows default input device sd.default.device[0] if different from device_idx
+    try:
+        default_dev = sd.default.device[0]
+        if default_dev is not None and 0 <= default_dev < len(devices):
+            if devices[default_dev].get('max_input_channels', 0) > 0:
+                if default_dev not in candidate_devices:
+                    candidate_devices.append(default_dev)
+    except Exception:
+        pass
+
+    # 3. Third (if still different): DirectSound counterpart matching device name prefix (first 24 chars)
+    ref_name = ''
+    if candidate_devices:
+        ref_name = devices[candidate_devices[0]].get('name', '')
+    if ref_name:
+        prefix = ref_name[:24].lower()
+        for idx, dev in enumerate(devices):
+            if dev.get('max_input_channels', 0) > 0 and is_api(dev.get('hostapi', -1), 'directsound'):
+                dev_name = dev.get('name', '').lower()
+                if dev_name == ref_name.lower() or dev_name.startswith(prefix) or prefix in dev_name:
+                    if idx not in candidate_devices:
+                        candidate_devices.append(idx)
+                        break
+
+    # Fallback if candidate_devices is still empty
+    if not candidate_devices:
+        for idx, dev in enumerate(devices):
+            if dev.get('max_input_channels', 0) > 0:
+                candidate_devices.append(idx)
+                break
 
     last_exc = None
-    for d_idx, sr in attempts:
+    for cand in candidate_devices:
         try:
-            stream = sd.InputStream(
-                device=d_idx,
-                channels=1,
-                samplerate=sr,
-                dtype='float32',
-                blocksize=0,
-                callback=callback,
-            )
-            return stream, sr, d_idx
-        except Exception as exc:
-            last_exc = exc
-            logger.warning('Failed to open InputStream on device %s @ %d Hz: %s', d_idx, sr, exc)
-            continue
+            dev_info = sd.query_devices(cand, 'input')
+        except Exception:
+            dev_info = devices[cand] if 0 <= cand < len(devices) else {}
+
+        dev_name = dev_info.get('name', str(cand))
+        native_sr = int(round(dev_info.get('default_samplerate', target_sr)))
+        max_ch = int(dev_info.get('max_input_channels', 1))
+
+        api_name = 'Unknown'
+        hostapi_idx = dev_info.get('hostapi', -1)
+        if 0 <= hostapi_idx < len(hostapis):
+            api_name = hostapis[hostapi_idx].get('name', 'Unknown')
+        is_wasapi = 'wasapi' in api_name.lower()
+
+        channel_attempts = [1]
+        if max_ch >= 2 and 2 not in channel_attempts:
+            channel_attempts.append(2)
+        if max_ch > 2 and max_ch not in channel_attempts:
+            channel_attempts.append(max_ch)
+
+        sr_attempts = [target_sr]
+        if native_sr > 0 and native_sr not in sr_attempts:
+            sr_attempts.append(native_sr)
+        for common_sr in (48000, 44100):
+            if common_sr not in sr_attempts:
+                sr_attempts.append(common_sr)
+
+        extra_settings_list = [None]
+        if is_wasapi and hasattr(sd, 'WasapiSettings'):
+            try:
+                extra_settings_list = [sd.WasapiSettings(auto_convert=True), None]
+            except Exception:
+                extra_settings_list = [None]
+
+        for extra_settings in extra_settings_list:
+            for ch in channel_attempts:
+                for sr in sr_attempts:
+                    stream = None
+                    try:
+                        stream = sd.InputStream(
+                            device=cand,
+                            samplerate=sr,
+                            channels=ch,
+                            dtype='float32',
+                            blocksize=0,
+                            callback=callback,
+                            extra_settings=extra_settings,
+                        )
+                        stream.start()
+                        logger.info(
+                            'Opened resilient InputStream | device=%s (%s) | api=%s | sr=%dHz | channels=%d',
+                            cand, dev_name, api_name, sr, ch,
+                        )
+                        return stream, sr, cand
+                    except Exception as exc:
+                        last_exc = exc
+                        if stream is not None:
+                            try:
+                                stream.close()
+                            except Exception:
+                                pass
+                        logger.warning(
+                            'Failed to open InputStream on device %s (%s) | api=%s | sr=%d | ch=%d | err=%s',
+                            cand, dev_name, api_name, sr, ch, exc,
+                        )
+                        continue
 
     raise RuntimeError(f'Could not open audio InputStream after multiple attempts: {last_exc}')
 

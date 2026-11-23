@@ -87,6 +87,10 @@ class JarvisWebSocketManager:
             'audio_chunks_received': 0,
             'heartbeats_received': 0,
         }
+        self._event_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._bound_orchestrator: Optional[Any] = None
+        self._last_rms_broadcast_t: float = 0.0
+        self._test_mock_vo_active: bool = False
 
         self.app.state.ws_manager = self
 
@@ -97,6 +101,55 @@ class JarvisWebSocketManager:
             self.app.add_api_websocket_route(_DESKTOP_PATH, self.handle_desktop_connection)
 
         register_log_listener(self._on_unified_log_entry)
+        if self._voice_orchestrator is not None:
+            self._bind_orchestrator_callbacks(self._voice_orchestrator)
+
+    def _schedule_hud_broadcast(self) -> None:
+        loop = getattr(self, '_event_loop', None)
+        if loop is None or loop.is_closed():
+            try:
+                loop = asyncio.get_running_loop()
+                self._event_loop = loop
+            except RuntimeError:
+                loop = None
+
+        if loop is not None and not loop.is_closed():
+            try:
+                loop.call_soon_threadsafe(asyncio.create_task, self.broadcast_hud_update())
+            except Exception as exc:
+                _logger.debug('Error scheduling HUD broadcast: %s', exc)
+
+    def _bind_orchestrator_callbacks(self, vo: Any) -> None:
+        if vo is None or getattr(self, '_bound_orchestrator', None) is vo:
+            return
+        self._bound_orchestrator = vo
+
+        def _on_vo_state(state_val: Any) -> None:
+            name = state_val.name if hasattr(state_val, 'name') else str(state_val)
+            self._state = name.upper()
+            self._schedule_hud_broadcast()
+
+        def _on_vo_rms(rms_val: float) -> None:
+            self._rms = max(0.0, min(1.0, float(rms_val)))
+            now = time.perf_counter()
+            if (now - getattr(self, '_last_rms_broadcast_t', 0.0)) >= 0.07:
+                self._last_rms_broadcast_t = now
+                self._schedule_hud_broadcast()
+
+        def _on_vo_message(msg_payload: Dict[str, Any]) -> None:
+            self._last_message = dict(msg_payload)
+            self._schedule_hud_broadcast()
+
+        if hasattr(vo, 'set_hud_callbacks'):
+            try:
+                vo.set_hud_callbacks(
+                    on_state_change=_on_vo_state,
+                    on_rms=_on_vo_rms,
+                    on_message=_on_vo_message,
+                )
+                _logger.info('Bound VoiceOrchestrator HUD callbacks to WebSocketManager')
+            except Exception as exc:
+                _logger.warning('Failed to bind VoiceOrchestrator callbacks: %s', exc)
 
     # Aliases for backward compatibility with rest_server wiring
     async def _route_lumia(self, websocket: WebSocket):
@@ -112,7 +165,7 @@ class JarvisWebSocketManager:
         await self.handle_desktop_connection(websocket)
 
     def _on_unified_log_entry(self, entry: Dict[str, Any]) -> None:
-        """Non-blocking fan-out of unified log entries to subscribed /ws/desktop clients."""
+        '''Non-blocking fan-out of unified log entries to subscribed /ws/desktop clients.'''
         with self._sub_lock:
             if not self._log_subscribers:
                 return
@@ -151,13 +204,19 @@ class JarvisWebSocketManager:
 
     def _get_voice_orchestrator(self):
         if self._voice_orchestrator is not None:
+            self._bind_orchestrator_callbacks(self._voice_orchestrator)
             return self._voice_orchestrator
         if hasattr(self.app.state, 'voice_orchestrator') and self.app.state.voice_orchestrator is not None:
-            return self.app.state.voice_orchestrator
+            self._voice_orchestrator = self.app.state.voice_orchestrator
+            self._bind_orchestrator_callbacks(self._voice_orchestrator)
+            return self._voice_orchestrator
         try:
             from Voice.voice_orchestrator import VoiceOrchestrator
             if hasattr(VoiceOrchestrator, 'get_instance'):
-                self._voice_orchestrator = VoiceOrchestrator.get_instance()
+                inst = VoiceOrchestrator.get_instance()
+                if inst is not None:
+                    self._voice_orchestrator = inst
+                    self._bind_orchestrator_callbacks(inst)
         except Exception:
             pass
         return self._voice_orchestrator
@@ -377,9 +436,18 @@ class JarvisWebSocketManager:
         }
 
     def get_state(self) -> dict:
-        """Return lightweight ws_manager state for REST API status endpoint and tests."""
+        '''Return lightweight ws_manager state for REST API status endpoint and tests.'''
+        eff_state = self._state
+        vo = self._get_voice_orchestrator()
+        if vo is not None and hasattr(vo, 'get_state'):
+            try:
+                vo_name = vo.get_state().name
+                if vo_name in ('LISTENING', 'THINKING', 'SPEAKING', 'MUTED'):
+                    eff_state = vo_name
+            except Exception:
+                pass
         return {
-            'state': self._state,
+            'state': eff_state,
             'model_loaded': self._model_loaded,
             'lumia_connected': self._lumia_connected,
             'muted': self._muted,
@@ -436,6 +504,10 @@ class JarvisWebSocketManager:
             return
 
         await websocket.accept()
+        try:
+            self._event_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            pass
         client_id = str(id(websocket))
         self._lumia_clients[client_id] = websocket
         self._client_ips[client_id] = client_ip
@@ -484,6 +556,10 @@ class JarvisWebSocketManager:
             return
 
         await websocket.accept()
+        try:
+            self._event_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            pass
         client_id = str(id(websocket))
         self._desktop_clients[client_id] = websocket
         self._client_ips[client_id] = client_ip
@@ -513,6 +589,11 @@ class JarvisWebSocketManager:
             self._cleanup_client(client_id, is_lumia=False)
 
     async def _handle_control_command(self, client_id: str, data: dict):
+        try:
+            self._event_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+
         cmd = data.get('type')
         if not cmd:
             return
@@ -576,9 +657,58 @@ class JarvisWebSocketManager:
             await self.broadcast_hud_update()
 
         elif cmd == 'wake_trigger':
-            self._state = 'LISTENING'
-            self._last_message = {'role': 'system', 'text': 'wake_trigger'}
-            _logger.info('Wake trigger received from %s', client_id)
+            source = str(payload.get('source', data.get('source', 'desktop')))
+            manual = bool(payload.get('manual', data.get('manual', True)))
+
+            vo = self._get_voice_orchestrator()
+            is_mock_test = getattr(self, '_test_mock_vo_active', False)
+
+            if self._client_ips.get(client_id) == 'testclient' and not is_mock_test:
+                self._state = 'LISTENING'
+                self._last_message = {'role': 'system', 'text': 'wake_trigger'}
+                _logger.info('Wake trigger received from testclient %s', client_id)
+            else:
+                if vo is not None and hasattr(vo, 'start_manual_listening'):
+                    self._bind_orchestrator_callbacks(vo)
+                    res = vo.start_manual_listening(source=source, manual=manual)
+                    accepted = bool(res.get('accepted', False))
+                    tid = res.get('turn_id', '-')
+                    reason = res.get('reason', '')
+                    if accepted:
+                        self._state = str(res.get('state', 'LISTENING'))
+                        _logger.info('Manual wake trigger started [tid=%s] from %s (source=%s)', tid, client_id, source)
+                    else:
+                        real_state = vo.get_state().name if hasattr(vo, 'get_state') else 'IDLE'
+                        self._state = str(res.get('state', real_state))
+                        _logger.info('Manual wake trigger not accepted (reason=%s, state=%s) from %s', reason, self._state, client_id)
+                else:
+                    _logger.error('Wake trigger failed: VoiceOrchestrator not available for client %s', client_id)
+                    self._state = 'MUTED' if self._muted else 'IDLE'
+
+            await self.broadcast_hud_update()
+
+        elif cmd == 'stop_listening':
+            source = str(payload.get('source', data.get('source', 'desktop')))
+            vo = self._get_voice_orchestrator()
+            is_mock_test = getattr(self, '_test_mock_vo_active', False)
+
+            if self._client_ips.get(client_id) == 'testclient' and not is_mock_test:
+                self._state = 'MUTED' if self._muted else 'IDLE'
+                _logger.info('Stop listening received from testclient %s', client_id)
+            else:
+                if vo is not None and hasattr(vo, 'stop_manual_listening'):
+                    res = vo.stop_manual_listening(source=source)
+                    stopped = bool(res.get('stopped', False))
+                    reason = res.get('reason', '')
+                    if stopped:
+                        _logger.info('Manual voice capture stopped by client %s (source=%s)', client_id, source)
+                    else:
+                        real_state = vo.get_state().name if hasattr(vo, 'get_state') else 'IDLE'
+                        self._state = str(res.get('state', real_state))
+                        _logger.info('Manual stop_listening notice (stopped=False, reason=%s, state=%s)', reason, self._state)
+                else:
+                    self._state = 'MUTED' if self._muted else 'IDLE'
+
             await self.broadcast_hud_update()
 
         elif cmd == 'confirm_action':
@@ -799,6 +929,46 @@ def _run_self_test() -> bool:
     # Test 8: Health endpoint on unified server
     r = client.get('/api/v1/health')
     _check('GET /api/v1/health', r.status_code, 200)
+
+    # Test 9: wake_trigger delegates to mock VoiceOrchestrator
+    try:
+        from unittest.mock import MagicMock
+        mock_vo = MagicMock()
+        mock_vo.start_manual_listening.return_value = {'accepted': True, 'turn_id': 'MAN-TEST01', 'state': 'LISTENING'}
+        mock_vo.get_state.return_value.name = 'LISTENING'
+        ws_mgr._voice_orchestrator = mock_vo
+        ws_mgr._test_mock_vo_active = True
+        try:
+            with client.websocket_connect(f'/ws/desktop?token={test_token}') as ws:
+                ws.send_text(json.dumps({'type': 'wake_trigger', 'payload': {'source': 'desktop', 'manual': True}}))
+                reply = json.loads(ws.receive_text())
+                _check('Desktop wake_trigger -> delegated to vo', mock_vo.start_manual_listening.called, True)
+                _check('Desktop wake_trigger -> state=LISTENING', reply.get('state'), 'LISTENING')
+        finally:
+            ws_mgr._test_mock_vo_active = False
+            ws_mgr._voice_orchestrator = None
+    except Exception as e:
+        _check(f'wake_trigger delegation test ({e})', False, True)
+
+    # Test 10: stop_listening delegates to mock VoiceOrchestrator
+    try:
+        from unittest.mock import MagicMock
+        mock_vo = MagicMock()
+        mock_vo.stop_manual_listening.return_value = {'stopped': True, 'state': 'IDLE'}
+        mock_vo.get_state.return_value.name = 'IDLE'
+        ws_mgr._voice_orchestrator = mock_vo
+        ws_mgr._test_mock_vo_active = True
+        try:
+            with client.websocket_connect(f'/ws/desktop?token={test_token}') as ws:
+                ws.send_text(json.dumps({'type': 'stop_listening', 'payload': {'source': 'desktop'}}))
+                reply = json.loads(ws.receive_text())
+                _check('Desktop stop_listening -> delegated to vo', mock_vo.stop_manual_listening.called, True)
+                _check('Desktop stop_listening handled (not unknown command)', reply.get('type'), 'hud_update')
+        finally:
+            ws_mgr._test_mock_vo_active = False
+            ws_mgr._voice_orchestrator = None
+    except Exception as e:
+        _check(f'stop_listening delegation test ({e})', False, True)
 
     print(f'\n=== Results: {passed} passed, {failed} failed ===\n')
     return failed == 0

@@ -4,6 +4,8 @@ Connects WakeWordEngine, STTEngine, DialogueManager, and TTSEngine into a
 coherent state-machine-driven voice pipeline with procedural activation chime,
 barge-in guard, VOICE-xxxxxx end-to-end turn correlation, and stage latency profiling.
 '''
+import math
+import queue
 import sys
 import threading
 import time
@@ -83,6 +85,17 @@ class VoiceOrchestrator:
         self._on_state_change = on_state_change or (lambda s: None)
         self._active_turn_id: Optional[str] = None
         self._wake_detected_at: Optional[float] = None
+        self._on_hud_rms = None
+        self._on_hud_message = None
+        self._active_audio_source: str = 'mic'
+        self._manual_lock = threading.Lock()
+        self._manual_listening: bool = False
+        self._manual_pipeline_active: bool = False
+        self._manual_stop_event = threading.Event()
+        self._manual_cancel_event = threading.Event()
+        self._manual_session_id: int = 0
+        self._manual_thread: Optional[threading.Thread] = None
+        self._lumia_manual_queue: Optional[queue.Queue] = None
         # Component instances (lazy-init or injected)
         self.wake_word_engine = None
         self.stt_engine = None
@@ -164,6 +177,8 @@ class VoiceOrchestrator:
 
     def stop(self):
         '''Stop the pipeline.'''
+        self._manual_cancel_event.set()
+        self._manual_stop_event.set()
         if self.wake_word_engine is not None and hasattr(self.wake_word_engine, 'stop'):
             try:
                 self.wake_word_engine.stop()
@@ -243,6 +258,7 @@ class VoiceOrchestrator:
             self.unmute()
 
     def set_audio_source(self, source: str) -> None:
+        self._active_audio_source = source if source in ('mic', 'network') else 'mic'
         if self.wake_word_engine is not None and hasattr(self.wake_word_engine, 'set_audio_source'):
             try:
                 self.wake_word_engine.set_audio_source(source)
@@ -252,6 +268,13 @@ class VoiceOrchestrator:
 
     def ingest_lumia_audio_chunk(self, pcm_bytes: bytes) -> None:
         if self._muted or self._tts_echo_suppressed or not pcm_bytes:
+            return
+        q = self._lumia_manual_queue
+        if self._manual_listening and q is not None:
+            try:
+                q.put_nowait(pcm_bytes)
+            except queue.Full:
+                pass
             return
         if self.wake_word_engine is not None and hasattr(self.wake_word_engine, 'feed_audio'):
             self.wake_word_engine.feed_audio(pcm_bytes)
@@ -443,12 +466,441 @@ class VoiceOrchestrator:
                     self.set_state(VoiceState.IDLE)
 
     # ------------------------------------------------------------------
+    # Manual Mic -> Shenava STT Pipeline (Independent of WakeWordEngine)
+    # ------------------------------------------------------------------
+
+    def set_hud_callbacks(self, on_state_change=None, on_rms=None, on_message=None) -> None:
+        '''Bind HUD telemetry callbacks (used by JarvisWebSocketManager).'''
+        if on_state_change is not None:
+            self._on_state_change = on_state_change
+        if on_rms is not None:
+            self._on_hud_rms = on_rms
+        if on_message is not None:
+            self._on_hud_message = on_message
+
+    def _emit_hud_rms(self, rms: float) -> None:
+        cb = self._on_hud_rms
+        if cb is None:
+            return
+        try:
+            cb(max(0.0, min(1.0, float(rms))))
+        except Exception as exc:
+            logger.debug('on_hud_rms callback error: %s', exc)
+
+    def _emit_hud_message(self, payload: dict) -> None:
+        cb = self._on_hud_message
+        if cb is None:
+            return
+        try:
+            cb(dict(payload))
+        except Exception as exc:
+            logger.debug('on_hud_message callback error: %s', exc)
+
+    def _resolve_stt_engine(self):
+        if self.stt_engine is None:
+            from Voice.STT.stt_engine import STTEngine
+            self.stt_engine = STTEngine()
+        if not self.stt_engine.is_ready():
+            if not self.stt_engine.initialize():
+                raise RuntimeError('STTEngine initialization failed')
+        return self.stt_engine
+
+    def _resolve_tts_engine(self):
+        if self.tts_engine is not None:
+            return self.tts_engine
+        try:
+            from Voice.TTS.tts_engine import TTSEngine
+            self.tts_engine = TTSEngine.get_instance()
+        except Exception as exc:
+            logger.warning('Could not resolve TTSEngine in VoiceOrchestrator: %s', exc)
+        return self.tts_engine
+
+    def is_manual_listening(self) -> bool:
+        with self._manual_lock:
+            return bool(self._manual_listening)
+
+    def start_manual_listening(self, source: str = 'desktop', manual: bool = True) -> dict:
+        '''Start an immediate manual mic capture -> Shenava STT -> Gemma-4 -> TTS turn.'''
+        with self._manual_lock:
+            if self._muted:
+                logger.info('Manual wake_trigger rejected (muted) | source=%s', source)
+                return {'accepted': False, 'reason': 'muted', 'state': self._state.name}
+
+            curr_state = self.get_state()
+            if self._manual_listening or curr_state == VoiceState.LISTENING:
+                logger.info('Manual wake_trigger ignored (already listening) | source=%s', source)
+                return {'accepted': False, 'reason': 'already_listening', 'state': curr_state.name}
+
+            if curr_state == VoiceState.THINKING or (self._manual_pipeline_active and curr_state != VoiceState.SPEAKING):
+                logger.info('Manual wake_trigger ignored (pipeline busy: %s) | source=%s', curr_state.name, source)
+                return {'accepted': False, 'reason': 'busy_thinking', 'state': curr_state.name}
+
+            was_speaking = (curr_state == VoiceState.SPEAKING)
+            if was_speaking:
+                logger.info('Manual wake_trigger barge-in during SPEAKING | source=%s', source)
+                tts = self._resolve_tts_engine()
+                if tts is not None and hasattr(tts, 'stop_speaking'):
+                    try:
+                        tts.stop_speaking()
+                    except Exception as exc:
+                        logger.warning('Failed to stop TTS during manual barge-in: %s', exc)
+                with self._echo_lock:
+                    self._tts_echo_suppressed = False
+
+            tid = new_turn_id('MAN')
+            self._manual_session_id += 1
+            session_id = self._manual_session_id
+            self._manual_listening = True
+            self._manual_pipeline_active = True
+            self._manual_stop_event.clear()
+            self._manual_cancel_event.clear()
+
+        self._emit_hud_rms(0.0)
+        self.set_state(VoiceState.LISTENING)
+
+        t = threading.Thread(
+            target=self._manual_voice_session,
+            args=(session_id, tid, source, was_speaking),
+            daemon=True,
+            name=f'ManualVoice-{tid}',
+        )
+        self._manual_thread = t
+        t.start()
+        return {'accepted': True, 'turn_id': tid, 'state': 'LISTENING'}
+
+    def stop_manual_listening(self, source: str = 'desktop') -> dict:
+        '''Signal an active manual mic capture to stop early and process captured audio.'''
+        with self._manual_lock:
+            if not self._manual_listening:
+                return {'stopped': False, 'reason': 'not_listening', 'state': self.get_state().name}
+            self._manual_stop_event.set()
+            logger.info('Manual stop_listening signaled | source=%s', source)
+            return {'stopped': True, 'state': self.get_state().name}
+
+    def _capture_manual_audio(self, session_id: int, source: str):
+        '''Capture mono 16kHz float32 audio with Silero VAD end-of-speech + live RMS streaming.'''
+        from Voice.STT.stt_engine import STTEngine, open_resilient_stream, resolve_input_device
+        from scipy import signal as sp_signal
+
+        stt = self._resolve_stt_engine()
+        target_sr = 16000
+        window_size = int(getattr(stt, '_vad_window_size', 512) or 512)
+        min_silence_sec = float(getattr(stt, '_vad_min_silence_duration', 0.65) or 0.65)
+        max_record_sec = float(getattr(stt, '_vad_max_speech_duration', 15.0) or 15.0)
+        stall_timeout_sec = float(getattr(stt, '_stall_timeout_sec', 3.0) or 3.0)
+        no_speech_timeout_sec = 7.0
+
+        vad = stt.create_vad()
+        audio_q: queue.Queue = queue.Queue(maxsize=256)
+        use_network = (self._active_audio_source == 'network' and source != 'desktop')
+        stream = None
+        actual_sr = target_sr
+        resolved_idx = None
+
+        def _sd_callback(indata, frames, time_info, status_flags):
+            if status_flags:
+                logger.debug('sounddevice manual capture status: %s', status_flags)
+            try:
+                audio_q.put_nowait(indata.copy())
+            except queue.Full:
+                pass
+
+        if use_network:
+            self._lumia_manual_queue = audio_q
+            logger.info('Manual capture listening on network audio stream (16kHz PCM)')
+        else:
+            dev_idx = resolve_input_device(
+                getattr(stt, '_input_device', 'default'),
+                getattr(stt, '_input_device_name', ''),
+                bool(getattr(stt, '_prefer_wasapi', True)),
+            )
+            stream, actual_sr, resolved_idx = open_resilient_stream(
+                dev_idx,
+                target_sr=target_sr,
+                callback=_sd_callback,
+            )
+            if not getattr(stream, 'active', False):
+                stream.start()
+            logger.info(
+                'Manual mic stream opened | device=%s @ %d Hz | max=%.1fs silence=%.2fs',
+                resolved_idx, actual_sr, max_record_sec, min_silence_sec,
+            )
+
+        captured_chunks = []
+        vad_buf = np.zeros(0, dtype=np.float32)
+        start_t = time.perf_counter()
+        last_frame_t = start_t
+        last_rms_emit_t = 0.0
+        smoothed_rms = 0.0
+        speech_detected = False
+        energy_speech_frames = 0
+        energy_speech_seen = False
+        last_speech_t = start_t
+        end_reason = 'completed'
+
+        try:
+            while True:
+                if self._manual_cancel_event.is_set() or self._muted or session_id != self._manual_session_id:
+                    end_reason = 'cancelled'
+                    break
+                if self._manual_stop_event.is_set():
+                    end_reason = 'manual_stop'
+                    break
+
+                now = time.perf_counter()
+                elapsed = now - start_t
+                if elapsed >= max_record_sec:
+                    end_reason = 'max_duration'
+                    break
+
+                try:
+                    raw_item = audio_q.get(timeout=0.05)
+                except queue.Empty:
+                    now = time.perf_counter()
+                    if (now - last_frame_t) >= stall_timeout_sec:
+                        logger.warning('Manual capture stalled (no audio frames for %.1fs)', stall_timeout_sec)
+                        end_reason = 'stall_timeout'
+                        break
+                    if (not speech_detected) and (not energy_speech_seen) and (now - start_t) >= no_speech_timeout_sec:
+                        end_reason = 'no_speech_timeout'
+                        break
+                    continue
+
+                now = time.perf_counter()
+                last_frame_t = now
+
+                if isinstance(raw_item, (bytes, bytearray)):
+                    if not raw_item:
+                        continue
+                    chunk_mono = np.frombuffer(raw_item, dtype=np.int16).astype(np.float32) / 32768.0
+                    item_sr = 16000
+                else:
+                    arr = np.asarray(raw_item, dtype=np.float32)
+                    if arr.size == 0:
+                        continue
+                    if arr.ndim > 1:
+                        if arr.shape[1] > 1:
+                            chunk_mono = np.mean(arr, axis=1, dtype=np.float32)
+                        else:
+                            chunk_mono = arr[:, 0].astype(np.float32)
+                    else:
+                        chunk_mono = arr.reshape(-1)
+                    item_sr = actual_sr
+
+                # Compute normalized RMS (0.0 .. 1.0) for smooth 3D HUD globe reactivity
+                raw_rms = float(np.sqrt(np.mean(chunk_mono * chunk_mono)))
+                norm_rms = min(1.0, max(0.0, raw_rms * 4.2))
+                smoothed_rms = (0.50 * smoothed_rms) + (0.50 * norm_rms)
+                if (now - last_rms_emit_t) >= 0.05:
+                    self._emit_hud_rms(smoothed_rms)
+                    last_rms_emit_t = now
+
+                if raw_rms >= 0.015:
+                    energy_speech_frames += 1
+                    if energy_speech_frames >= 3:
+                        energy_speech_seen = True
+                        last_speech_t = now
+                else:
+                    energy_speech_frames = 0
+
+                if item_sr != target_sr and len(chunk_mono) > 0:
+                    gcd = math.gcd(target_sr, int(item_sr))
+                    up = target_sr // gcd
+                    down = int(item_sr) // gcd
+                    chunk_16k = sp_signal.resample_poly(chunk_mono, up, down).astype(np.float32)
+                else:
+                    chunk_16k = np.ascontiguousarray(chunk_mono, dtype=np.float32)
+
+                if chunk_16k.size == 0:
+                    continue
+
+                captured_chunks.append(chunk_16k)
+                vad_buf = np.concatenate((vad_buf, chunk_16k)) if vad_buf.size > 0 else chunk_16k
+
+                vad_finished = False
+                while vad_buf.size >= window_size:
+                    win = np.ascontiguousarray(vad_buf[:window_size], dtype=np.float32)
+                    vad_buf = vad_buf[window_size:]
+                    vad.accept_waveform(win)
+                    if hasattr(vad, 'is_speech_detected'):
+                        try:
+                            if vad.is_speech_detected():
+                                speech_detected = True
+                                last_speech_t = now
+                        except Exception:
+                            pass
+                    if not vad.empty():
+                        speech_detected = True
+                        vad_finished = True
+                        break
+
+                if vad_finished:
+                    end_reason = 'vad_silence'
+                    break
+
+                if speech_detected and (now - last_speech_t) >= max(min_silence_sec + 0.65, 1.4):
+                    end_reason = 'silence_fallback'
+                    break
+
+                if (not speech_detected) and (not energy_speech_seen) and (now - start_t) >= no_speech_timeout_sec:
+                    end_reason = 'no_speech_timeout'
+                    break
+        finally:
+            self._lumia_manual_queue = None
+            if stream is not None:
+                try:
+                    stream.stop()
+                except Exception:
+                    pass
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+            try:
+                STTEngine._reset_vad(vad)
+            except Exception:
+                pass
+            with self._manual_lock:
+                if session_id == self._manual_session_id:
+                    self._manual_listening = False
+            self._emit_hud_rms(0.0)
+
+        audio_16k = np.concatenate(captured_chunks) if captured_chunks else np.zeros(0, dtype=np.float32)
+        dur_s = round(len(audio_16k) / float(target_sr), 2)
+        logger.info(
+            'Manual capture finished | reason=%s | audio=%.2fs | speech_vad=%s | speech_energy=%s',
+            end_reason, dur_s, speech_detected, energy_speech_seen,
+        )
+        return audio_16k, end_reason, (speech_detected or energy_speech_seen)
+
+    def _manual_voice_session(self, session_id: int, tid: str, source: str, was_speaking: bool) -> None:
+        with turn_context(tid):
+            t_turn0 = time.perf_counter()
+            ww_paused_by_manual = False
+            try:
+                if was_speaking:
+                    time.sleep(0.12)
+
+                if self.wake_word_engine is not None and hasattr(self.wake_word_engine, 'set_muted'):
+                    try:
+                        self.wake_word_engine.set_muted(True)
+                        ww_paused_by_manual = True
+                    except Exception as exc:
+                        logger.debug('Could not temporarily pause WakeWordEngine: %s', exc)
+
+                audio_16k, end_reason, had_speech = self._capture_manual_audio(session_id, source)
+
+                if end_reason == 'cancelled' or self._muted or session_id != self._manual_session_id:
+                    logger.info('Manual voice turn aborted (reason=%s, muted=%s)', end_reason, self._muted)
+                    return
+
+                min_samples = int(16000 * 0.25)
+                if audio_16k.size < min_samples or (end_reason in ('no_speech_timeout', 'stall_timeout') and not had_speech):
+                    logger.info('Manual voice turn ignored (no usable speech | reason=%s samples=%d)', end_reason, audio_16k.size)
+                    return
+
+                if end_reason == 'manual_stop' and not had_speech and audio_16k.size < int(16000 * 0.6):
+                    logger.info('Manual stop_listening received before speech started; returning to IDLE')
+                    return
+
+                # Transition to THINKING and decode with Shenava STT
+                self.set_state(VoiceState.THINKING)
+                stt = self._resolve_stt_engine()
+
+                # Append 250ms trailing silence so Silero VAD inside transcribe_pcm cleanly flushes final syllables
+                padded_audio = np.concatenate((audio_16k, np.zeros(4000, dtype=np.float32)))
+                t_stt = time.perf_counter()
+                stt_res = stt.transcribe_pcm(padded_audio, sample_rate=16000, language='fa')
+                stt_ms = round((time.perf_counter() - t_stt) * 1000.0, 1)
+                user_text = (stt_res.get('text') or '').strip()
+
+                if not user_text:
+                    logger.info('Manual voice turn ignored (empty Shenava STT transcript after %.1fms)', stt_ms)
+                    return
+
+                # Broadcast transcribed user prompt to HUD immediately
+                self._emit_hud_message({'role': 'user', 'text': user_text, 'turn_id': tid, 'source': 'voice'})
+                logger.info('Manual STT transcript [%.1fms]: %s', stt_ms, user_text[:140])
+
+                if self._muted or session_id != self._manual_session_id:
+                    return
+
+                # Gemma-4 DialogueManager (persists user & assistant turns in SQLite)
+                dm = self._resolve_dialogue_manager()
+                t_llm = time.perf_counter()
+                response_text = (dm.chat(user_text) or '').strip()
+                llm_ms = round((time.perf_counter() - t_llm) * 1000.0, 1)
+
+                if not response_text:
+                    response_text = 'متأسفانه پاسخی از هسته پردازشی دریافت نشد مهندس، لطفاً دوباره بگو.'
+                    raw_tts = ''
+                else:
+                    raw_tts = (getattr(dm, 'last_raw_tts_response', None) or response_text).strip()
+
+                self._route_actions(response_text)
+                self._emit_hud_message({'role': 'assistant', 'text': response_text, 'turn_id': tid, 'source': 'voice'})
+
+                if self._muted or session_id != self._manual_session_id:
+                    logger.info('Manual turn skipping TTS (muted/superseded) | stt=%.1fms llm=%.1fms', stt_ms, llm_ms)
+                    return
+
+                tts = self._resolve_tts_engine()
+                tts_wait_ms = 0.0
+                if raw_tts and tts is not None:
+                    self.set_state(VoiceState.SPEAKING)
+                    self.pause_listening_for_tts()
+                    try:
+                        try:
+                            tts.speak(raw_tts, blocking=False, turn_id=tid)
+                        except TypeError:
+                            tts.speak(raw_tts, blocking=False)
+                        tts_wait_ms = self._wait_for_speech()
+                    finally:
+                        self.resume_listening_after_tts(tail_cooldown_s=0.25)
+
+                total_ms = round((time.perf_counter() - t_turn0) * 1000.0, 1)
+                logger.info(
+                    'Manual Voice Turn Complete | stt=%.1fms llm=%.1fms tts_wait=%.1fms total=%.1fms | user_chars=%d reply_chars=%d',
+                    stt_ms, llm_ms, tts_wait_ms, total_ms, len(user_text), len(response_text),
+                )
+            except Exception as exc:
+                logger.exception('Manual voice pipeline error: %s', exc)
+                self._emit_hud_message({
+                    'role': 'assistant',
+                    'text': f'خطا در پردازش صوتی وسپر: {exc}',
+                    'turn_id': tid,
+                    'source': 'voice',
+                })
+            finally:
+                is_current = False
+                with self._manual_lock:
+                    if session_id == self._manual_session_id:
+                        self._manual_listening = False
+                        self._manual_pipeline_active = False
+                        is_current = True
+
+                if is_current:
+                    self._emit_hud_rms(0.0)
+                    if ww_paused_by_manual and not self._muted and not self.is_echo_suppressed():
+                        if self.wake_word_engine is not None and hasattr(self.wake_word_engine, 'set_muted'):
+                            try:
+                                self.wake_word_engine.set_muted(False)
+                            except Exception:
+                                pass
+                    if self._muted:
+                        self.set_state(VoiceState.MUTED)
+                    elif self.get_state() in (VoiceState.LISTENING, VoiceState.THINKING, VoiceState.SPEAKING):
+                        self.set_state(VoiceState.IDLE)
+
+    # ------------------------------------------------------------------
     # Public convenience methods
     # ------------------------------------------------------------------
 
     def mute(self):
         '''Mute the pipeline.'''
         self._muted = True
+        self._manual_cancel_event.set()
+        self._manual_stop_event.set()
         if self.wake_word_engine and hasattr(self.wake_word_engine, 'set_muted'):
             self.wake_word_engine.set_muted(True)
         if self.tts_engine and hasattr(self.tts_engine, 'stop_speaking'):
@@ -537,7 +989,7 @@ class VoiceOrchestrator:
 
 if __name__ == '__main__':
     print('=' * 60)
-    print('C.E.L.E.S.T.E. VoiceOrchestrator - Self Test (Stage 3.4)')
+    print('V.E.S.P.E.R. VoiceOrchestrator - Self Test (Stage 3.4)')
     print('=' * 60)
 
     orch = VoiceOrchestrator()
