@@ -1,10 +1,10 @@
-# V.E.S.P.E.R. Project Status
-**System:** V.E.S.P.E.R. (*Voice-Enabled Strategic Processing & Execution Resource* / `vesper` / `وِسپِر`)  
+# OMEGA Project Status
+**System:** OMEGA (`omega` / `اُمگا`)  
 **Architecture:** Multi-Process Hybrid (Python 3.14 x64 Core Daemon + .NET 8 WPF Holographic HUD Client)  
 **Target Runtime LLM:** Gemma-4-26B-A4B-IT (`gemma-4-26B-A4B-it-UD-IQ4_XS.gguf`) with hybrid RTX 3080 + Ryzen 7 9700X DDR5 MoE tensor offloading (`-ot`)  
-**Voice Pipeline:** Dual-Engine TTS (Gemini Online TTS + Gooya Bozorg v1.5 Local TTS with Hybrid BF16/FP32+TF32, Dynamic Runway Pipelining, Gapless sounddevice Playback & Windows Process-Tree VRAM Release) + Shenava-Koochik-v1.0 (sherpa-onnx) + Silero VAD (CPU-only, 0 MB VRAM) STT + VesperAudioDSP  
+**Voice Pipeline:** Dual-Engine TTS (Gemini Online TTS + Gooya Bozorg v1.5 Local TTS with Hybrid BF16/FP32+TF32, Dynamic Runway Pipelining, Gapless sounddevice Playback & Windows Process-Tree VRAM Release) + Shenava-Koochik-v1.0 (sherpa-onnx) + Silero VAD (CPU-only, 0 MB VRAM) STT + OmegaAudioDSP  
 **Unified Port:** `8765` (REST API & Duplex WebSockets at `/ws/lumia` and `/ws/desktop`)  
-**Persistent Storage:** SQLite3 `Data/Memory/vesper_memory.db` with WAL mode & `user_facts`
+**Persistent Storage:** SQLite3 `Data/Memory/omega_memory.db` with WAL mode & `user_facts`
 
 ---
 
@@ -15,9 +15,9 @@
 - **Stage 3.1 to 3.4 (STT, TTS, DSP, WakeWord, VoiceOrchestrator):** COMPLETED & VERIFIED
 - **Stage 4.1 to 4.3 (4-Tier Security, HardwareMonitor, AutomationRouter):** COMPLETED & VERIFIED
 - **Stage 5.1 to 5.2 + Patch 5.2 (NetworkAuthManager with ipaddress & brute-force lockout, FastAPI REST Server on port 8765):** COMPLETED & VERIFIED
-- **Stage 5.3 (VesperWebSocketManager at /ws/lumia & /ws/desktop, 16kHz PCM binary audio streaming, automatic mic failover network <-> mic):** COMPLETED & VERIFIED
-- **Stage 6.1 (VesperMasterService 9-step orchestrator, Single-Instance Mutex, VRAM-safe LLM adoption & --dry-run):** COMPLETED & VERIFIED
-- **Stage 6.2 (StartupManager HKCU Run & Task Scheduler, vesper_watchdog.py, start_vesper_hidden.vbs):** COMPLETED & VERIFIED
+- **Stage 5.3 (OmegaWebSocketManager at /ws/lumia & /ws/desktop, 16kHz PCM binary audio streaming, automatic mic failover network <-> mic):** COMPLETED & VERIFIED
+- **Stage 6.1 (OmegaMasterService 9-step orchestrator, Single-Instance Mutex, VRAM-safe LLM adoption & --dry-run):** COMPLETED & VERIFIED
+- **Stage 6.2 (StartupManager HKCU Run & Task Scheduler, omega_watchdog.py, start_omega_hidden.vbs):** COMPLETED & VERIFIED
 - **Stage 7.1 (Desktop WPF Foundation, Iron Man Holographic Theme, Desktop Client & Models):** COMPLETED & VERIFIED
 - **Stage 7.2 (Desktop WPF Holographic HUD, Animated Concentric Arc Reactor, Live RMS Visualizer, Telemetry & RTL Persian Chat):** COMPLETED & VERIFIED
 - **Stage 7.3 (Desktop WPF Management Tabs: Voice/DSP Config, SQLite Facts CRUD, Security Audit/Startup Toggle & Live Logs):** COMPLETED & VERIFIED
@@ -26,7 +26,7 @@
 
 ## System Audit & Bug Fix History
 
-- **Bug Fix (2026-11-12):** `vesper_main.py` production path never started uvicorn on port 8765. Added `import uvicorn` + `uvicorn.run()` call in `_step9_ready_report()`. Also added health watchdog thread startup before the blocking `uvicorn.run()`.
+- **Bug Fix (2026-11-12):** `omega_main.py` production path never started uvicorn on port 8765. Added `import uvicorn` + `uvicorn.run()` call in `_step9_ready_report()`. Also added health watchdog thread startup before the blocking `uvicorn.run()`.
 - **Task 2 (2026-11-14): LLM Client Message Sanitization & DialogueManager Action Security Enforcement** — COMPLETED & VERIFIED.
   - `Core/AI/llm_client.py`: Fixed `_sanitize_messages` fallback so that when only system messages are passed, the system content is used as a user turn (or `"Hello"` if empty), guaranteeing the returned list always starts with at most one `system` message (index 0), alternates `user`/`assistant`, and ends with a `user` message for `llama-server.exe` Jinja template compatibility.
   - `Core/Conversation/dialogue_manager.py`: Imported `get_automation_router`; replaced raw `subprocess.run(cmd, shell=True)` and direct file I/O in `_execute_action` with permission-checked routing through `router.check_permission(...)` + `router.execute(...)`. Denied actions now return a clear Persian denial message (`دسترسی رد شد: ...`). `web_search` remains unchanged via `get_web_search_engine()`.
@@ -42,10 +42,10 @@
 ## Backend Evolution (v2.0 Architecture)
 
 - **Backend Phase 1 (2026-11-18): Config Consolidation, Gemma-4-26B-A4B MoE Offloading, Critical Bug Fixes & Cleanup** — COMPLETED & VERIFIED.
-  - Step 1: Upgraded `Configuration/config.json` and `Core/Config/config_loader.py` to unified v2.0.0 schema (VESPER, unified port 8765, dual-engine gemini/gooya, preserved cloud_ai/web_search/online_api_key keys).
+  - Step 1: Upgraded `Configuration/config.json` and `Core/Config/config_loader.py` to unified v2.0.0 schema (OMEGA, unified port 8765, dual-engine gemini/gooya, preserved cloud_ai/web_search/online_api_key keys).
   - Step 2: Updated `Core/ModelManager/llamacpp_manager.py` command builder to support Gemma-4-26B-A4B MoE with `-ngl 32`, `-c 8192`, `-b 2048`, `-ub 512`, `-t 8`, `-tb 8`, `-fa on`, `-ctk q8_0`, `-ctv q8_0`, and `-ot "blk\.(1[0-9]|[2-9][0-9])\.ffn_.*_exps\.=CPU"`, keeping port 8080 adoption logic intact.
   - Step 3: Fixed broken telemetry import in `Network/WebSocket/ws_server.py` to `Desktop.Monitoring.hardware_monitor.HardwareMonitor`, combining live CPU, GPU, VRAM, and RAM metrics into WebSocket `hud_update` broadcasts.
-  - Step 4: Fixed 401 Unauthorized watchdog bug in `Core/vesper_watchdog.py` by switching health check URL to unauthenticated `/api/v1/health`.
+  - Step 4: Fixed 401 Unauthorized watchdog bug in `Core/omega_watchdog.py` by switching health check URL to unauthenticated `/api/v1/health`.
   - Step 5: Cleaned up obsolete files `Core/AI/llm_client_new.py`, `Core/Conversation/_fix_llm.py`, `Network/Voice/`, `Voice/TTS/tts_engine.py.bak`, `Network/API/rest_server.py.bak`, and verified `config.json.bak` removal.
   - Step 6: Verified with non-blocking self-tests (`config_loader`, `llamacpp_manager`, `hardware_monitor`, `ws_server`, `rest_server`).
 
@@ -65,7 +65,7 @@
     - Replaced hardcoded model name in `/api/v1/status` with live `llama_cpp.target_model_name` from `ConfigManager` (`"Gemma 4 26B-A4B IT (IQ4_XS)"`).
     - Directly connected `GET /api/v1/memory/facts`, `POST /api/v1/memory/facts`, and `DELETE /api/v1/memory/facts/{fact_key}` to SQLite via `MemoryManager`, completely removing reliance on `_facts_fallback_store`.
     - Updated `GET`, `POST`, and `PUT` `/api/v1/voice/config` to accept and return the full voice and DSP settings dictionary (`engine_mode`, `online_api_key`, `gemini_model`, `gemini_voice_name`, `gooya_model_dir`, `gooya_reference_audio`, `gooya_exaggeration`, `gooya_cfg_weight`, `gooya_precision`, `gooya_auto_unload`, `dsp_pitch_semitones`, `dsp_metallic_mix`, `dsp_reverb_mix`, `wake_threshold`).
-    - Persisted settings changes to `Configuration/config.json` via `ConfigManager`, updated `VesperAudioDSP` and `WakeWordEngine` live, and called `tts_engine.update_config()` for instant mode switching (`gemini` <-> `gooya`) and dynamic VRAM unloading.
+    - Persisted settings changes to `Configuration/config.json` via `ConfigManager`, updated `OmegaAudioDSP` and `WakeWordEngine` live, and called `tts_engine.update_config()` for instant mode switching (`gemini` <-> `gooya`) and dynamic VRAM unloading.
   - Step 3: Verified with non-blocking self-tests:
     - `test_memory.py`: 100% passed with exit code 0.
     - `Network.API.rest_server`: 18/18 assertions passed with exit code 0.
@@ -79,7 +79,7 @@
     - Documented `GET /api/v1/memory/facts`, `POST /api/v1/memory/facts`, and polymorphic `DELETE /api/v1/memory/facts/{fact_id_or_key}` backed by SQLite `user_facts`.
     - Documented both `POST /api/v1/security/confirm` (body-based) and `POST /api/v1/security/audit/{item_id}/confirm` (path-based) confirmation endpoints.
   - Step 2: Updated `AI_CONTEXT.md`:
-    - Updated system identity to **C.E.L.E.S.T.E. v2.0** (*Cognitive Engineering & Logic Execution System for Tactical Engagements*).
+    - Updated system identity to **OMEGA v2.0** (`omega` / `اُمگا`).
     - Updated Target Runtime LLM to **Gemma-4-26B-A4B-IT (`gemma-4-26B-A4B-it-UD-IQ4_XS.gguf`)** with hybrid RTX 3080 + Ryzen 7 9700X DDR5 MoE tensor offloading (`-ot`).
     - Updated Voice Pipeline specification to **Dual-Engine TTS**: Gemini Online TTS (`gemini-2.5-flash-preview-tts`) + Gooya Bozorg v1.5 Local TTS (Chatterbox, PyTorch SDPA, BF16, cached speaker reference, dynamic VRAM release) with Faster-Whisper STT CPU lock.
     - Updated configuration schema to reflect v2.0 `config.json`.

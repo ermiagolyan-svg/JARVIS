@@ -1,4 +1,4 @@
-"""Llama.cpp CUDA Server Manager & Watchdog for C.E.L.E.S.T.E.
+"""Llama.cpp CUDA Server Manager & Watchdog for OMEGA.
 
 Manages llama-server.exe lifecycle and Gemma-4-26B-A4B MoE GGUF model,
 optimized for RTX 3080 (10GB VRAM) + Ryzen 7 9700X (32GB DDR5),
@@ -63,7 +63,7 @@ class LlamaCppManager:
         return getattr(self, '_loaded_config', {})
 
     def _load_config(self) -> None:
-        """Load C.E.L.E.S.T.E. config from Configuration/config.json."""
+        """Load OMEGA config from Configuration/config.json."""
         import json
         try:
             config_path = _PROJECT_ROOT / 'Configuration' / 'config.json'

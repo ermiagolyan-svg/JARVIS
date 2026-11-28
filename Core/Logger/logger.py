@@ -1,18 +1,18 @@
 """
-V.E.S.P.E.R. Unified Central Logger & Observability Pipeline
+OMEGA Unified Central Logger & Observability Pipeline
 ==============================================================
 Single Source of Truth for all Python modules, FastAPI/Uvicorn, background threads,
 and managed subprocesses (GooyaWorker, llama-server).
 
 Features:
 - Single root logging.Handler interceptor (zero duplicate file handlers on Windows).
-- Rotating unified text log (Logs/vesper.log), error-only log (Logs/errors.log),
-  and structured JSONL log (Logs/vesper.jsonl).
+- Rotating unified text log (Logs/omega.log), error-only log (Logs/errors.log),
+  and structured JSONL log (Logs/omega.jsonl).
 - Thread-safe in-memory Ring Buffer (2000 structured entries with monotonic ID,
   real local/ISO timestamps, level, module, thread, turn_id, message, traceback).
 - ContextVar-based end-to-end turn correlation (turn_id) and stage latency profiler.
 - Global sys.excepthook and threading.excepthook installers.
-- Non-blocking subprocess stream pumper supporting structured VESPER_LOG JSON
+- Non-blocking subprocess stream pumper supporting structured OMEGA_LOG JSON
   and intelligent plain-text level/traceback detection.
 - Optional real-time listener hooks for WebSocket live log streaming.
 """
@@ -38,9 +38,9 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _LOG_DIR = _PROJECT_ROOT / "Logs"
-_UNIFIED_LOG = _LOG_DIR / "vesper.log"
+_UNIFIED_LOG = _LOG_DIR / "omega.log"
 _ERROR_LOG = _LOG_DIR / "errors.log"
-_JSONL_LOG = _LOG_DIR / "vesper.jsonl"
+_JSONL_LOG = _LOG_DIR / "omega.jsonl"
 _LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 _RING_BUFFER_MAX = 2000
@@ -56,7 +56,7 @@ _unified_handler: Optional["_UnifiedLogHandler"] = None
 _listeners_lock = threading.Lock()
 _log_listeners: List[Callable[[Dict[str, Any]], None]] = []
 
-_turn_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("vesper_turn_id", default="-")
+_turn_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("omega_turn_id", default="-")
 _tls = threading.local()
 
 _NOISY_POLL_RE = re.compile(
@@ -222,7 +222,7 @@ class _UnifiedLogHandler(logging.Handler):
 
     @staticmethod
     def _clean_module_name(record: logging.LogRecord) -> str:
-        override = getattr(record, "vesper_module", None)
+        override = getattr(record, "omega_module", None)
         if override:
             return str(override)
         name = record.name or "root"
@@ -254,7 +254,7 @@ class _UnifiedLogHandler(logging.Handler):
                 level_no = logging.DEBUG
                 level_name = "DEBUG"
 
-            tb_text = getattr(record, "vesper_tb", None) or ""
+            tb_text = getattr(record, "omega_tb", None) or ""
             if not tb_text and record.exc_info:
                 try:
                     tb_text = "".join(traceback.format_exception(*record.exc_info)).rstrip()
@@ -398,7 +398,7 @@ def install_exception_hooks() -> None:
 
         _orig_sys_hook = sys.excepthook
 
-        def _vesper_sys_excepthook(exc_type, exc_value, exc_tb) -> None:
+        def _omega_sys_excepthook(exc_type, exc_value, exc_tb) -> None:
             if issubclass(exc_type, KeyboardInterrupt):
                 _orig_sys_hook(exc_type, exc_value, exc_tb)
                 return
@@ -408,10 +408,10 @@ def install_exception_hooks() -> None:
                 exc_info=(exc_type, exc_value, exc_tb),
             )
 
-        sys.excepthook = _vesper_sys_excepthook
+        sys.excepthook = _omega_sys_excepthook
 
         if hasattr(threading, "excepthook"):
-            def _vesper_thread_excepthook(args: threading.ExceptHookArgs) -> None:
+            def _omega_thread_excepthook(args: threading.ExceptHookArgs) -> None:
                 if args.exc_type is not None and issubclass(args.exc_type, SystemExit):
                     return
                 t_name = args.thread.name if args.thread else "unknown-thread"
@@ -422,7 +422,7 @@ def install_exception_hooks() -> None:
                     exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
                 )
 
-            threading.excepthook = _vesper_thread_excepthook
+            threading.excepthook = _omega_thread_excepthook
 
         _hooks_installed = True
 
@@ -462,13 +462,13 @@ def pump_subprocess_stream(
     stream: Any,
     module_name: str,
     default_level: int = logging.INFO,
-    json_prefix: str = "VESPER_LOG:",
+    json_prefix: str = "OMEGA_LOG:",
     thread_name: Optional[str] = None,
 ) -> threading.Thread:
     """
     Continuously drain a subprocess text stream (stderr/stdout) in a daemon thread
     without blocking the parent process or risking Windows pipe deadlocks.
-    Supports structured JSON lines (VESPER_LOG:{...}) and plain-text fallback with
+    Supports structured JSON lines (OMEGA_LOG:{...}) and plain-text fallback with
     multi-line Python traceback aggregation.
     """
     setup_unified_logging()
@@ -478,11 +478,11 @@ def pump_subprocess_stream(
         if not msg and not tb:
             return
         extra = {
-            "vesper_module": mod or module_name,
+            "omega_module": mod or module_name,
             "turn_id": turn_id or "-",
         }
         if tb:
-            extra["vesper_tb"] = tb
+            extra["omega_tb"] = tb
         target_logger.log(level_no, msg or "(subprocess traceback)", extra=extra)
 
     def _reader() -> None:
@@ -562,14 +562,14 @@ def pump_subprocess_stream(
 
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
-# VesperLogger Facade & Public API
+# OmegaLogger Facade & Public API
 # ---------------------------------------------------------------------------
-class VesperLogger:
+class OmegaLogger:
     """Thin facade over stdlib logging routed to the unified root pipeline."""
 
-    def __init__(self, name: str = "vesper") -> None:
+    def __init__(self, name: str = "omega") -> None:
         setup_unified_logging()
-        self._name = name or "vesper"
+        self._name = name or "omega"
         self._logger = logging.getLogger(self._name)
         self._logger.setLevel(logging.DEBUG)
         self._logger.propagate = True
@@ -588,7 +588,7 @@ class VesperLogger:
     ) -> None:
         merged_extra: Dict[str, Any] = dict(extra) if extra else {}
         if module:
-            merged_extra["vesper_module"] = module
+            merged_extra["omega_module"] = module
         if turn_id:
             merged_extra["turn_id"] = turn_id
         self._logger.log(
@@ -636,17 +636,17 @@ class VesperLogger:
         return get_recent_logs(limit=limit, level=level, module=module, search=search, since_id=since_id)
 
 
-_logger_cache: Dict[str, VesperLogger] = {}
+_logger_cache: Dict[str, OmegaLogger] = {}
 _cache_lock = threading.Lock()
 
 
-def get_logger(module_name: str = "vesper") -> VesperLogger:
-    """Get or create a thread-safe VesperLogger bound to the unified pipeline."""
+def get_logger(module_name: str = "omega") -> OmegaLogger:
+    """Get or create a thread-safe OmegaLogger bound to the unified pipeline."""
     setup_unified_logging()
-    key = (module_name or "vesper").strip() or "vesper"
+    key = (module_name or "omega").strip() or "omega"
     with _cache_lock:
         if key not in _logger_cache:
-            _logger_cache[key] = VesperLogger(key)
+            _logger_cache[key] = OmegaLogger(key)
         return _logger_cache[key]
 
 

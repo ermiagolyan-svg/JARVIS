@@ -1,4 +1,4 @@
-# V.E.S.P.E.R. Windows System Control Module
+# OMEGA Windows System Control Module
 import os, sys, subprocess, logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -163,7 +163,7 @@ def get_system_control() -> SystemControl:
 
 if __name__ == "__main__":
     print("=" * 70)
-    print("V.E.S.P.E.R. Windows System Control - Self Test")
+    print("OMEGA Windows System Control - Self Test")
     print("=" * 70)
     sc = get_system_control()
     print("\n[RISK CLASSIFICATION]")

@@ -1,4 +1,4 @@
-# V.E.S.P.E.R. Windows Startup Manager
+# OMEGA Windows Startup Manager
 import logging
 import os
 import sys
@@ -10,9 +10,9 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 _REGISTRY_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-_REGISTRY_VALUE_NAME = "VESPER_AI_System"
-_TASK_NAME = "VESPER_AI_System"
-_VESPER_WATCHDOG = "Core\\vesper_watchdog.py"
+_REGISTRY_VALUE_NAME = "OMEGA_AI_System"
+_TASK_NAME = "OMEGA_AI_System"
+_OMEGA_WATCHDOG = "Core\\omega_watchdog.py"
 _VENV_PYTHONW = ".venv\\Scripts\\pythonw.exe"
 
 
@@ -21,16 +21,16 @@ def _project_root() -> Path:
 
 
 def _build_entry_path() -> str:
-    return str(_project_root() / _VESPER_WATCHDOG)
+    return str(_project_root() / _OMEGA_WATCHDOG)
 
 
 def _build_vbs_entry_path() -> str:
-    return str(_project_root() / "Installer" / "start_vesper_hidden.vbs")
+    return str(_project_root() / "Installer" / "start_omega_hidden.vbs")
 
 
 def register_startup() -> bool:
     project_root = _project_root()
-    entry_path = str(project_root / _VESPER_WATCHDOG)
+    entry_path = str(project_root / _OMEGA_WATCHDOG)
 
     try:
         key = winreg.OpenKey(
@@ -84,7 +84,7 @@ def is_registered() -> bool:
         )
         value, _ = winreg.QueryValueEx(key, _REGISTRY_VALUE_NAME)
         winreg.CloseKey(key)
-        registry_ok = bool(value) and "vesper_watchdog" in str(value).lower()
+        registry_ok = bool(value) and "omega_watchdog" in str(value).lower()
     except (OSError, FileNotFoundError):
         registry_ok = False
 
@@ -142,7 +142,7 @@ def get_startup_info() -> dict:
 
 if __name__ == "__main__":
     print("=" * 70)
-    print("V.E.S.P.E.R. Startup Manager - Self Test (non-blocking)")
+    print("OMEGA Startup Manager - Self Test (non-blocking)")
     print("=" * 70)
 
     info = get_startup_info()

@@ -1,4 +1,4 @@
-# LLMClient for C.E.L.E.S.T.E. — Hybrid Local (llama-server.exe) + Cloud API Router
+# LLMClient for OMEGA — Hybrid Local (llama-server.exe) + Cloud API Router
 # Unified Observability: TTFT / Eval / tok/s profiling, explicit fallback logs, turn_id propagation.
 import json
 import os

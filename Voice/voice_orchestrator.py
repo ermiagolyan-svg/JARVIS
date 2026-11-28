@@ -1,4 +1,4 @@
-'''C.E.L.E.S.T.E. Voice Pipeline Orchestrator - Stage 3.4 + Unified Observability.
+'''OMEGA Voice Pipeline Orchestrator - Stage 3.4 + Unified Observability.
 
 Connects WakeWordEngine, STTEngine, DialogueManager, and TTSEngine into a
 coherent state-machine-driven voice pipeline with procedural activation chime,
@@ -322,8 +322,8 @@ class VoiceOrchestrator:
         chime = np.clip(tone1 + tone2, -1.0, 1.0)
 
         try:
-            from Voice.AudioDSP.vesper_dsp import VesperAudioDSP
-            dsp = VesperAudioDSP(pitch_semitones=-3.0, sample_rate=self.CHIME_SR)
+            from Voice.AudioDSP.omega_dsp import OmegaAudioDSP
+            dsp = OmegaAudioDSP(pitch_semitones=-3.0, sample_rate=self.CHIME_SR)
             chime = dsp.process(chime)
         except Exception as exc:
             logger.warning('Activation chime DSP bypass: %s', exc)
@@ -474,7 +474,7 @@ class VoiceOrchestrator:
     # ------------------------------------------------------------------
 
     def set_hud_callbacks(self, on_state_change=None, on_rms=None, on_message=None) -> None:
-        '''Bind HUD telemetry callbacks (used by VesperWebSocketManager).'''
+        '''Bind HUD telemetry callbacks (used by OmegaWebSocketManager).'''
         if on_state_change is not None:
             self._on_state_change = on_state_change
         if on_rms is not None:
@@ -871,7 +871,7 @@ class VoiceOrchestrator:
                 logger.exception('Manual voice pipeline error: %s', exc)
                 self._emit_hud_message({
                     'role': 'assistant',
-                    'text': f'خطا در پردازش صوتی وسپر: {exc}',
+                    'text': f'خطا در پردازش صوتی اُمگا: {exc}',
                     'turn_id': tid,
                     'source': 'voice',
                 })
@@ -932,9 +932,9 @@ class VoiceOrchestrator:
         tts_config=None,
     ):
         '''Apply voice configuration changes live to the active pipeline.'''
-        from Voice.AudioDSP.vesper_dsp import VesperAudioDSP
+        from Voice.AudioDSP.omega_dsp import OmegaAudioDSP
 
-        VesperAudioDSP.set_global_config(
+        OmegaAudioDSP.set_global_config(
             pitch_semitones=pitch_semitones,
             metallic_mix=metallic_mix,
             reverb_decay=reverb_decay,
@@ -993,7 +993,7 @@ class VoiceOrchestrator:
 
 if __name__ == '__main__':
     print('=' * 60)
-    print('V.E.S.P.E.R. VoiceOrchestrator - Self Test (Stage 3.4)')
+    print('OMEGA VoiceOrchestrator - Self Test (Stage 3.4)')
     print('=' * 60)
 
     orch = VoiceOrchestrator()
@@ -1067,15 +1067,15 @@ if __name__ == '__main__':
     assert np.max(np.abs(chime)) <= 1.0
     print(f'[TEST] Chime: {len(chime)} samples, peak={np.max(np.abs(chime)):.4f} - OK')
 
-    from Voice.AudioDSP.vesper_dsp import VesperAudioDSP
-    dsp = VesperAudioDSP(pitch_semitones=-3.0)
+    from Voice.AudioDSP.omega_dsp import OmegaAudioDSP
+    dsp = OmegaAudioDSP(pitch_semitones=-3.0)
     processed = dsp.process(chime)
     assert len(processed) > 0
     assert np.max(np.abs(processed)) <= 1.0
     print(f'[TEST] DSP on chime: {len(processed)} samples, peak={np.max(np.abs(processed)):.4f} - OK')
 
     from Core.Conversation.dialogue_manager import parse_actions
-    test_text = 'سلام VESPER <action>{"type": "run_command", "params": {"command": "ls"}}</action>'
+    test_text = 'سلام OMEGA <action>{"type": "run_command", "params": {"command": "ls"}}</action>'
     actions, remaining = parse_actions(test_text)
     assert len(actions) == 1
     assert actions[0]['type'] == 'run_command'

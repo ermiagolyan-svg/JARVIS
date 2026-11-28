@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hardware Telemetry Monitor for V.E.S.P.E.R. desktop monitoring."""
+"""Hardware Telemetry Monitor for OMEGA desktop monitoring."""
 
 import time
 import os
@@ -188,7 +188,7 @@ class HardwareMonitor:
         """Return a human-readable Persian (Farsi) status summary string."""
         snap = self.get_telemetry_snapshot()
         lines = []
-        lines.append("== V.E.S.P.E.R. Hardware Telemetry ==")
+        lines.append("== OMEGA Hardware Telemetry ==")
         lines.append("")
         cpu = snap.cpu
         lines.append(f"CPU: {cpu.usage_percent}% | Per-core: {cpu.per_core_load}")
@@ -220,7 +220,7 @@ class HardwareMonitor:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("  V.E.S.P.E.R. Hardware Monitor - Self-Test")
+    print("  OMEGA Hardware Monitor - Self-Test")
     print("=" * 60)
 
     monitor = HardwareMonitor()

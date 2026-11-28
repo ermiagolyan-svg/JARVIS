@@ -1,4 +1,4 @@
-# V.E.S.P.E.R. Local HTTP REST & WebSocket API Server (Port 8765)
+# OMEGA Local HTTP REST & WebSocket API Server (Port 8765)
 # Synchronized with Desktop UI and Unified Observability Pipeline
 
 import os
@@ -488,7 +488,7 @@ class MemoryCreateRequest(BaseModel):
 # FastAPI App Factory
 # ---------------------------------------------------------------------------
 def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
-    app = FastAPI(title="V.E.S.P.E.R. REST & WS API", version="2.0.0")
+    app = FastAPI(title="OMEGA REST & WS API", version="2.0.0")
     app.state.voice_orchestrator = voice_orchestrator
 
     @app.middleware("http")
@@ -518,20 +518,20 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
     # --- Health & Ping ---
     @app.get("/ping", tags=["health"])
     async def api_ping():
-        return {"status": "ok", "service": "V.E.S.P.E.R. REST API", "token_auth": True}
+        return {"status": "ok", "service": "OMEGA REST API", "token_auth": True}
 
     @app.get("/api/v1/health", tags=["health"])
     async def api_health():
-        return {"status": "ok", "healthy": True, "service": "V.E.S.P.E.R. REST API", "version": "1.0.0"}
+        return {"status": "ok", "healthy": True, "service": "OMEGA REST API", "version": "1.0.0"}
 
     @app.get("/health", tags=["health"])
     async def api_health_alias():
-        return {"status": "ok", "healthy": True, "service": "V.E.S.P.E.R. REST API", "version": "1.0.0"}
+        return {"status": "ok", "healthy": True, "service": "OMEGA REST API", "version": "1.0.0"}
 
     # --- Pairing ---
     @app.post("/api/v1/pair", tags=["pairing"])
     async def api_pair(body: PairRequest):
-        dev = body.device_id or body.device_name or "VesperDesktopPC"
+        dev = body.device_id or body.device_name or "OmegaDesktopPC"
         pin = get_active_pairing_pin()
         token = get_master_token()
         _pairing_pins[dev] = pin
@@ -603,7 +603,7 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
                 pass
 
         return {
-            "service": "V.E.S.P.E.R. REST API",
+            "service": "OMEGA REST API",
             "version": "1.0.0",
             "lan_only": True,
             "token_auth": True,
@@ -694,12 +694,12 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
                     if dm.llm_client and dm.llm_client.get_health_status():
                         reply_text = dm.chat(user_message)
                     else:
-                        reply_text = f"پاسخ تست وسپر: {user_message}"
+                        reply_text = f"پاسخ تست اُمگا: {user_message}"
                 else:
-                    reply_text = f"پاسخ تست وسپر: {user_message}"
+                    reply_text = f"پاسخ تست اُمگا: {user_message}"
             except Exception as e:
                 _logger.exception("Chat turn error: %s", e)
-                reply_text = f"خطا در ارتباط با هسته پردازشی وسپر: {e}"
+                reply_text = f"خطا در ارتباط با هسته پردازشی اُمگا: {e}"
             finally:
                 llm_ms = round((time.perf_counter() - t0) * 1000.0, 1)
 
@@ -747,8 +747,8 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
     async def api_voice_config_get():
         _sync_voice_config_from_disk()
         try:
-            from Voice.AudioDSP.vesper_dsp import VesperAudioDSP
-            VesperAudioDSP.set_global_config(
+            from Voice.AudioDSP.omega_dsp import OmegaAudioDSP
+            OmegaAudioDSP.set_global_config(
                 pitch_semitones=_voice_config.get("dsp_pitch_semitones", _voice_config.get("pitch_semitones")),
                 metallic_mix=_voice_config.get("dsp_metallic_mix", _voice_config.get("metallic_mix")),
                 reverb_decay=_voice_config.get("dsp_reverb_mix", _voice_config.get("reverb_decay")),
@@ -841,16 +841,16 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
             except Exception as e:
                 _logger.warning("Could not persist voice config: %s", e, exc_info=True)
 
-        # Update VesperAudioDSP live
+        # Update OmegaAudioDSP live
         try:
-            from Voice.AudioDSP.vesper_dsp import VesperAudioDSP
-            VesperAudioDSP.set_global_config(
+            from Voice.AudioDSP.omega_dsp import OmegaAudioDSP
+            OmegaAudioDSP.set_global_config(
                 pitch_semitones=_voice_config.get("dsp_pitch_semitones"),
                 metallic_mix=_voice_config.get("dsp_metallic_mix"),
                 reverb_decay=_voice_config.get("dsp_reverb_mix"),
             )
         except Exception as e:
-            _logger.warning("Failed to update VesperAudioDSP: %s", e)
+            _logger.warning("Failed to update OmegaAudioDSP: %s", e)
 
         # Update WakeWordEngine & VoiceOrchestrator live
         orch = getattr(request.app.state, "voice_orchestrator", None)
@@ -1162,8 +1162,8 @@ def create_rest_app(voice_orchestrator: Any = None) -> FastAPI:
 
     # --- Mount WebSocket Server (/ws/desktop & /ws/lumia) with shared voice_orchestrator ---
     try:
-        from Network.WebSocket.ws_server import VesperWebSocketManager
-        _ws_mgr = VesperWebSocketManager(app, voice_orchestrator=voice_orchestrator)
+        from Network.WebSocket.ws_server import OmegaWebSocketManager
+        _ws_mgr = OmegaWebSocketManager(app, voice_orchestrator=voice_orchestrator)
         app.state.ws_manager = _ws_mgr
     except Exception as e:
         _logger.warning("WebSocket manager mount warning: %s", e, exc_info=True)
@@ -1191,11 +1191,11 @@ def _run_self_test() -> bool:
     r_stat = client.get("/api/v1/status", headers=headers)
     _check("GET /status", r_stat, 200)
     assert r_stat.json().get("model_name") == "Gemma 4 26B-A4B IT (IQ4_XS)", f"Expected Gemma 4 model name, got: {r_stat.json().get('model_name')}"
-    _check("POST /pair", client.post("/api/v1/pair", json={"device_name": "VesperDesktopPC"}, headers=headers), 200)
+    _check("POST /pair", client.post("/api/v1/pair", json={"device_name": "OmegaDesktopPC"}, headers=headers), 200)
     r_tel = client.get("/api/v1/telemetry", headers=headers)
     _check("GET /telemetry", r_tel, 200)
     print(f"  [INFO] Live Telemetry Snapshot: {r_tel.json()}")
-    r_chat = client.post("/api/v1/chat", json={"text": "سلام وسپر"}, headers=headers)
+    r_chat = client.post("/api/v1/chat", json={"text": "سلام اُمگا"}, headers=headers)
     _check("POST /chat (C# text + spoken_response)", r_chat, 200)
     assert "spoken_response" in r_chat.json(), "Missing spoken_response!"
     _check("POST /voice/mute", client.post("/api/v1/voice/mute", json={"muted": True}, headers=headers), 200)
@@ -1221,4 +1221,4 @@ def _run_self_test() -> bool:
 
 if __name__ == "__main__":
     if _run_self_test():
-        print("[OK] V.E.S.P.E.R. REST API & Telemetry 100% synchronized with C# Desktop UI.")
+        print("[OK] OMEGA REST API & Telemetry 100% synchronized with C# Desktop UI.")

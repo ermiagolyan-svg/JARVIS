@@ -1,4 +1,4 @@
-# V.E.S.P.E.R. Voice - Offline STT Engine Test Suite
+# OMEGA Voice - Offline STT Engine Test Suite
 # Shenava-Koochik CTC + Silero VAD (CPU-only) automated unit and integration tests.
 
 import sys
@@ -118,7 +118,7 @@ def test_device_resolution():
 
 def main():
     print('=' * 60)
-    print('V.E.S.P.E.R. STT Engine (Shenava + Silero VAD) Test Suite')
+    print('OMEGA STT Engine (Shenava + Silero VAD) Test Suite')
     print('=' * 60)
 
     engine = test_engine_import_and_config()

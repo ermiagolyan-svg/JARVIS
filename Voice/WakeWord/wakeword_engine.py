@@ -1,4 +1,4 @@
-'''V.E.S.P.E.R. Voice - Continuous Wake-Word Detection Engine.'''
+'''OMEGA Voice - Continuous Wake-Word Detection Engine.'''
 import collections
 import logging
 import sys
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 SAMPLE_RATE = 16000
 CHUNK_SAMPLES = int(1280)
-_TEMP_FALLBACK_OWW_MODEL = "hey_jarvis"  # Temporary openWakeWord fallback until custom vesper.onnx is trained
+_TEMP_FALLBACK_OWW_MODEL = "hey_jarvis"  # Temporary openWakeWord fallback until custom omega.onnx is trained
 
 
 class WakeWordEngine:
@@ -37,14 +37,14 @@ class WakeWordEngine:
         try:
             from openwakeword import Model as OWModel
 
-            custom_model_path = PROJECT_ROOT / "Data" / "Models" / "wakeword" / "vesper.onnx"
+            custom_model_path = PROJECT_ROOT / "Data" / "Models" / "wakeword" / "omega.onnx"
             if custom_model_path.exists():
-                logger.info("Found custom V.E.S.P.E.R. wake-word model at %s", custom_model_path)
+                logger.info("Found custom OMEGA wake-word model at %s", custom_model_path)
                 model_target = [str(custom_model_path)]
-                model_name = "vesper"
+                model_name = "omega"
             else:
                 logger.warning(
-                    "Custom vesper.onnx not found at %s. Falling back to temporary model: %s",
+                    "Custom omega.onnx not found at %s. Falling back to temporary model: %s",
                     custom_model_path,
                     _TEMP_FALLBACK_OWW_MODEL,
                 )
@@ -167,7 +167,7 @@ class WakeWordEngine:
 
 if __name__ == '__main__':
     print('=' * 60)
-    print('V.E.S.P.E.R. WakeWordEngine - Self Test')
+    print('OMEGA WakeWordEngine - Self Test')
     print('=' * 60)
     engine = WakeWordEngine(
         on_wake_word_detected=lambda ww: logger.info('WAKE: %s', ww),

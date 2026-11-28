@@ -1,4 +1,4 @@
-# V.E.S.P.E.R. Real-Time WebSocket Server - Lumia Audio Streaming & Control
+# OMEGA Real-Time WebSocket Server - Lumia Audio Streaming & Control
 # Mounted on the unified FastAPI app (port 8765) at /ws/lumia and /ws/desktop.
 # Integrated with Unified Central Logger, Turn Correlation, and Opt-in Live Log Streaming.
 
@@ -53,7 +53,7 @@ def _log_central(level: str, msg: str, exc_info: bool = False) -> None:
     fn(msg, exc_info=exc_info)
 
 
-class VesperWebSocketManager:
+class OmegaWebSocketManager:
     # Manages /ws/lumia (binary 16kHz PCM + JSON) and /ws/desktop (JSON control/HUD + live logs).
 
     def __init__(
@@ -778,7 +778,7 @@ class VesperWebSocketManager:
                         llm_ms = round((time.perf_counter() - t0) * 1000.0, 1)
                         self._state = 'MUTED' if self._muted else 'IDLE'
                         _logger.exception('text_command AI failure after %.1fms: %s', llm_ms, e)
-                        self._last_message = {'role': 'assistant', 'text': f'خطا در ارتباط با هسته پردازشی وسپر: {e}', 'turn_id': tid, 'source': 'desktop'}
+                        self._last_message = {'role': 'assistant', 'text': f'خطا در ارتباط با هسته پردازشی اُمگا: {e}', 'turn_id': tid, 'source': 'desktop'}
             else:
                 self._last_message = {'role': 'user', 'text': text, 'source': 'desktop'}
             await self.broadcast_hud_update()
@@ -836,7 +836,7 @@ def _resolve_test_token(app: FastAPI, client: TestClient) -> str:
     except Exception:
         pass
 
-    ws_mgr: Optional[VesperWebSocketManager] = getattr(app.state, 'ws_manager', None)
+    ws_mgr: Optional[OmegaWebSocketManager] = getattr(app.state, 'ws_manager', None)
     auth_mgr = ws_mgr._get_auth_manager() if ws_mgr else None
     if auth_mgr is not None:
         for attr in ('master_token', '_master_token', 'active_token'):
@@ -858,7 +858,7 @@ def _run_self_test() -> bool:
     app = create_rest_app()
     ws_mgr = getattr(app.state, 'ws_manager', None)
     if ws_mgr is None:
-        ws_mgr = VesperWebSocketManager(app)
+        ws_mgr = OmegaWebSocketManager(app)
 
     client = TestClient(app)
     test_token = _resolve_test_token(app, client)
@@ -933,7 +933,7 @@ def _run_self_test() -> bool:
         from unittest.mock import patch
         with patch('Core.Conversation.dialogue_manager.DialogueManager.chat', return_value='Salam'):
             with client.websocket_connect(f'/ws/desktop?token={test_token}') as ws:
-                ws.send_text(json.dumps({'type': 'text_command', 'payload': {'text': 'Hello VESPER'}}))
+                ws.send_text(json.dumps({'type': 'text_command', 'payload': {'text': 'Hello OMEGA'}}))
                 reply = json.loads(ws.receive_text())
                 _check('Desktop text_command -> hud_update', reply.get('type'), 'hud_update')
                 _check('Desktop text_command -> assistant reply', reply.get('last_message', {}).get('text'), 'Salam')
@@ -990,7 +990,7 @@ def _run_self_test() -> bool:
 
 if __name__ == '__main__':
     print('=' * 60)
-    print('V.E.S.P.E.R. WebSocket Server - Self Test')
+    print('OMEGA WebSocket Server - Self Test')
     print('=' * 60)
     ok = _run_self_test()
     if not ok:

@@ -1,4 +1,4 @@
-'''Memory manager for V.E.S.P.E.R. — wraps DatabaseManager and ConfigManager.'''
+'''Memory manager for OMEGA — wraps DatabaseManager and ConfigManager.'''
 import logging
 import os
 import sys
@@ -277,8 +277,8 @@ if __name__ == '__main__':
     mm = MemoryManager()
 
     print('--- add_message ---')
-    mm.add_message('s1', 'user', 'سلام وسپر')
-    mm.add_message('s2', 'assistant', 'Hello VESPER! How can I help?')
+    mm.add_message('s1', 'user', 'سلام اُمگا')
+    mm.add_message('s2', 'assistant', 'Hello OMEGA! How can I help?')
     rows = mm.get_recent_context(5)
     for r in rows:
         print(dict(r))

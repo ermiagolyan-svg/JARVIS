@@ -1,6 +1,6 @@
-# C.E.L.E.S.T.E. REST & WebSocket API Contract — v2.0 Architecture
+# OMEGA REST & WebSocket API Contract — v2.0 Architecture
 
-**System:** C.E.L.E.S.T.E. v2.0 (*Cognitive Engineering & Logic Execution System for Tactical Engagements*)  
+**System:** OMEGA v2.0 (`omega` / `اُمگا`)  
 **Version:** 2.0.0 (Unified REST & WebSocket Architecture)  
 **Unified Port:** `8765` (All HTTP REST endpoints and duplex WebSocket channels run on the same port)  
 **Base REST URL:** `http://<server-ip>:8765/api/v1/`  
@@ -35,7 +35,7 @@ All communications pass through unified port `8765`. Both HTTP REST endpoints an
 - **Protocol:** Duplex WebSocket (Binary PCM + JSON control frames).
 - **Audio Ingestion:** Binary 16-bit 16kHz Mono raw PCM audio chunks streamed directly from remote devices (e.g., Lumia smartphone).
 - **Dynamic Mic Switching:**
-  - When a client connects and streams audio to `/ws/lumia`, `VesperWebSocketManager` sets `active_mic = "network"` and routes audio buffers to `VoiceOrchestrator.ingest_lumia_audio_chunk()`.
+  - When a client connects and streams audio to `/ws/lumia`, `OmegaWebSocketManager` sets `active_mic = "network"` and routes audio buffers to `VoiceOrchestrator.ingest_lumia_audio_chunk()`.
   - If the client disconnects or fails to send a heartbeat within 25.0 seconds, `active_mic` automatically fails over to `"mic"` (local physical soundcard) with zero pipeline interruption.
 - **Control Frame Ingestion (JSON):**
   - Heartbeat: `{"type": "heartbeat"}`
@@ -64,13 +64,13 @@ All communications pass through unified port `8765`. Both HTTP REST endpoints an
     "ram_used_gb": 12.8,
     "ram_total_gb": 32.0,
     "requests_total": 48,
-    "last_pairing": "VesperDesktopPC",
+    "last_pairing": "OmegaDesktopPC",
     "voice_muted": false
   },
   "pending_confirmations": [],
   "last_message": {
     "role": "assistant",
-    "content": "درود، سامانه وسپر نسخه ۲.۰ آماده اجرای فرامین است."
+    "content": "درود، سامانه اُمگا نسخه ۲.۰ آماده اجرای فرامین است."
   }
 }
 ```
@@ -90,8 +90,8 @@ All communications pass through unified port `8765`. Both HTTP REST endpoints an
 
 | Method | Path | Auth | Description |
 |---|---|:---:|---|
-| `GET` | `/ping` | ❌ | Liveness probe: `{"status": "ok", "service": "V.E.S.P.E.R. REST API", "token_auth": true}` |
-| `GET` | `/api/v1/health` | ❌ | Canonical health check used by `vesper_watchdog.py`: `{"status": "ok", "healthy": true, "version": "1.0.0"}` |
+| `GET` | `/ping` | ❌ | Liveness probe: `{"status": "ok", "service": "OMEGA REST API", "token_auth": true}` |
+| `GET` | `/api/v1/health` | ❌ | Canonical health check used by `omega_watchdog.py`: `{"status": "ok", "healthy": true, "version": "1.0.0"}` |
 | `GET` | `/health` | ❌ | Unauthenticated alias for `/api/v1/health` |
 | `GET` | `/api/v1/status` | ✅ | Returns full system status including live LLM model name (`Gemma 4 26B-A4B IT (IQ4_XS)`), memory count, pending security items, and active mic |
 | `GET` | `/api/v1/telemetry` | ✅ | Live hardware telemetry snapshot queried directly via `HardwareMonitor` (CPU %, GPU %, VRAM used/total MB, GPU temp C, RAM used/total GB, request counters) |
@@ -99,7 +99,7 @@ All communications pass through unified port `8765`. Both HTTP REST endpoints an
 #### `/api/v1/status` Response Example
 ```json
 {
-  "service": "V.E.S.P.E.R. REST API",
+  "service": "OMEGA REST API",
   "version": "1.0.0",
   "lan_only": true,
   "token_auth": true,
@@ -122,7 +122,7 @@ All communications pass through unified port `8765`. Both HTTP REST endpoints an
 
 | Method | Path | Auth | Description |
 |---|---|:---:|---|
-| `POST` | `/api/v1/pair` | ❌ / ✅ | Pair a client device (e.g. desktop client or mobile). Body: `{"device_name": "VesperDesktopPC", "pin": "876500"}`. Returns master auth token |
+| `POST` | `/api/v1/pair` | ❌ / ✅ | Pair a client device (e.g. desktop client or mobile). Body: `{"device_name": "OmegaDesktopPC", "pin": "876500"}`. Returns master auth token |
 | `GET` | `/api/v1/pair/{device_id}` | ✅ | Check pairing status of a registered device ID |
 
 ---
@@ -131,7 +131,7 @@ All communications pass through unified port `8765`. Both HTTP REST endpoints an
 
 | Method | Path | Auth | Description |
 |---|---|:---:|---|
-| `POST` | `/api/v1/chat` | ✅ | Send message to V.E.S.P.E.R. dialogue engine. Triggers AI inference and asynchronous TTS synthesis |
+| `POST` | `/api/v1/chat` | ✅ | Send message to OMEGA dialogue engine. Triggers AI inference and asynchronous TTS synthesis |
 
 #### Request Payload (`ChatRequest`)
 Supports both `text` (C# WPF client) and `message` fields:
@@ -147,9 +147,9 @@ Supports both `text` (C# WPF client) and `message` fields:
 #### Response Payload (`ChatResponse`)
 ```json
 {
-  "spoken_response": "تمامی زیرسیستم‌های وسپر در وضعیت پایدار قرار دارند.",
-  "response": "تمامی زیرسیستم‌های وسپر در وضعیت پایدار قرار دارند.",
-  "reply": "تمامی زیرسیستم‌های وسپر در وضعیت پایدار قرار دارند.",
+  "spoken_response": "تمامی زیرسیستم‌های اُمگا در وضعیت پایدار قرار دارند.",
+  "response": "تمامی زیرسیستم‌های اُمگا در وضعیت پایدار قرار دارند.",
+  "reply": "تمامی زیرسیستم‌های اُمگا در وضعیت پایدار قرار دارند.",
   "intent": "ai_response",
   "confidence": 0.98,
   "language": "fa",
@@ -201,7 +201,7 @@ The voice pipeline supports dual engines:
 
 #### Behavior & Dynamic VRAM Unloading
 - Incoming updates are persisted to `Configuration/config.json` via `ConfigManager`.
-- Live DSP parameters are applied immediately to `VesperAudioDSP` (pitch shift, comb filter, convolution reverb).
+- Live DSP parameters are applied immediately to `OmegaAudioDSP` (pitch shift, comb filter, convolution reverb).
 - Live wake threshold is applied directly to `WakeWordEngine`.
 - Live engine switching triggers `TTSEngine.update_config()`:
   - Switching to `"gooya"` initializes or wakes the local Gooya worker on the RTX 3080.
@@ -211,7 +211,7 @@ The voice pipeline supports dual engines:
 
 ### 3.5 Persistent Memory & SQLite Facts (`user_facts`)
 
-The memory subsystem is fully backed by SQLite (`Data/Memory/vesper_memory.db`) via `MemoryManager`.
+The memory subsystem is fully backed by SQLite (`Data/Memory/omega_memory.db`) via `MemoryManager`.
 
 | Method | Path | Auth | Description |
 |---|---|:---:|---|
@@ -270,7 +270,7 @@ Supports passing either an integer SQLite primary key `id` (`DELETE /api/v1/memo
 
 ### 3.6 Security Audit & Human Confirmation
 
-C.E.L.E.S.T.E. enforces a 4-Tier Security Gatekeeper (`SAFE`, `MODERATE`, `SENSITIVE`, `DANGEROUS`). Sensitive and dangerous commands require explicit human confirmation.
+OMEGA enforces a 4-Tier Security Gatekeeper (`SAFE`, `MODERATE`, `SENSITIVE`, `DANGEROUS`). Sensitive and dangerous commands require explicit human confirmation.
 
 | Method | Path | Auth | Description |
 |---|---|:---:|---|

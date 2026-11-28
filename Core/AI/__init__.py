@@ -1,1 +1,1 @@
-# AI module for V.E.S.P.E.R. - LLM client and model management
+# AI module for OMEGA - LLM client and model management

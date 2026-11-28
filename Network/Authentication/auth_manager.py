@@ -1,4 +1,4 @@
-# V.E.S.P.E.R. Network Authentication & Device Pairing Manager
+# OMEGA Network Authentication & Device Pairing Manager
 # Restricts API access to private LAN IPs and manages token-based authentication.
 
 import ipaddress
@@ -380,7 +380,7 @@ def get_auth_manager() -> NetworkAuthManager:
 def run_self_test() -> None:
     """Run a comprehensive self-test of the network authentication manager."""
     print("=" * 70)
-    print("V.E.S.P.E.R. Network Authentication & Device Pairing - Self Test")
+    print("OMEGA Network Authentication & Device Pairing - Self Test")
     print("=" * 70)
 
     mgr = get_auth_manager()
@@ -429,7 +429,7 @@ def run_self_test() -> None:
 
     # --- Phase 4: Device Pairing ---
     print("\n[PHASE 4 - DEVICE PAIRING]")
-    devices = ["Laptop-01", "Phone-VESPER", "Smart-TV", "Tablet-Admin"]
+    devices = ["Laptop-01", "Phone-OMEGA", "Smart-TV", "Tablet-Admin"]
     pairing_results = []
     for device in devices:
         pr = mgr.pair_device(device)

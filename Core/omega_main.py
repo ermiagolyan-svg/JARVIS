@@ -21,11 +21,11 @@ setup_unified_logging()
 install_exception_hooks()
 
 # --- Windows Single-Instance Mutex ---
-_MUTEX_NAME = r"Global\VESPER_CORE_SINGLE_INSTANCE_MUTEX"
+_MUTEX_NAME = r"Global\OMEGA_CORE_SINGLE_INSTANCE_MUTEX"
 
 
 def _acquire_single_instance_mutex() -> bool:
-    """Acquire a named mutex to prevent duplicate V.E.S.P.E.R. instances.
+    """Acquire a named mutex to prevent duplicate OMEGA instances.
     Returns True if this instance owns the mutex (first instance).
     """
     handle = ctypes.windll.kernel32.CreateMutexW(None, True, _MUTEX_NAME)
@@ -46,13 +46,13 @@ from Core.ModelManager.llamacpp_manager import LlamaCppManager
 from Voice.STT.stt_engine import STTEngine
 from Voice.WakeWord.wakeword_engine import WakeWordEngine
 from Voice.TTS.tts_engine import TTSEngine
-from Voice.AudioDSP.vesper_dsp import VesperAudioDSP
+from Voice.AudioDSP.omega_dsp import OmegaAudioDSP
 from Voice.voice_orchestrator import VoiceOrchestrator
 from Network.API.rest_server import create_rest_app
 
 
-class VesperMasterService:
-    """Main V.E.S.P.E.R. service orchestrator for Core/vesper_main.py."""
+class OmegaMasterService:
+    """Main OMEGA service orchestrator for Core/omega_main.py."""
 
     def __init__(self, dry_run: bool = False):
         self._dry_run = dry_run
@@ -63,7 +63,7 @@ class VesperMasterService:
         # Always initialize unified logger immediately so early failures never crash on None
         setup_unified_logging()
         install_exception_hooks()
-        self.logger = get_logger("vesper_main")
+        self.logger = get_logger("omega_main")
 
         # Core components
         self.config: ConfigManager = None
@@ -73,7 +73,7 @@ class VesperMasterService:
         self.stt_engine: STTEngine = None
         self.wake_word_engine: WakeWordEngine = None
         self.tts_engine: TTSEngine = None
-        self.dsp: VesperAudioDSP = None
+        self.dsp: OmegaAudioDSP = None
         self.app = None
 
     # --- Step 1: Core Initialization ---
@@ -158,7 +158,7 @@ class VesperMasterService:
             self.stt_engine = STTEngine()
             self.wake_word_engine = WakeWordEngine()
             self.tts_engine = TTSEngine()
-            self.dsp = VesperAudioDSP()
+            self.dsp = OmegaAudioDSP()
 
             # Create VoiceOrchestrator (engines injected as attributes)
             self.voice_orchestrator = VoiceOrchestrator()
@@ -212,7 +212,7 @@ class VesperMasterService:
         """Step 9: Print readiness report (dry_run) or start uvicorn (production)."""
         if self._dry_run:
             self.logger.info("=" * 60)
-            self.logger.info("V.E.S.P.E.R. Dry-Run Readiness Report")
+            self.logger.info("OMEGA Dry-Run Readiness Report")
             self.logger.info("=" * 60)
             steps = [
                 ("1. Core", "Config + Unified Logger + Memory"),
@@ -237,7 +237,7 @@ class VesperMasterService:
             else:
                 ready = False
             if ready:
-                self.logger.info("سیستم وسپر آماده به کار است")
+                self.logger.info("سیستم اُمگا آماده به کار است")
             else:
                 self.logger.warning("TTS not yet ready — health watchdog will retry")
 
@@ -318,7 +318,7 @@ class VesperMasterService:
             self._llm_server_thread.join(timeout=5)
             self.logger.info("LLM server thread joined")
 
-        self.logger.info("V.E.S.P.E.R. shutdown complete")
+        self.logger.info("OMEGA shutdown complete")
         sys.exit(0)
 
     # --- Health Watchdog ---
@@ -341,7 +341,7 @@ class VesperMasterService:
     def run(self) -> None:
         """Entry point: initialize and start the service."""
         if not _acquire_single_instance_mutex():
-            self.logger.error("Another V.E.S.P.E.R. instance is already running. Exiting.")
+            self.logger.error("Another OMEGA instance is already running. Exiting.")
             sys.exit(1)
 
         try:
@@ -352,11 +352,11 @@ class VesperMasterService:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V.E.S.P.E.R. MasterService")
+    parser = argparse.ArgumentParser(description="OMEGA MasterService")
     parser.add_argument("--dry-run", action="store_true", help="Run readiness check only")
     args = parser.parse_args()
 
-    service = VesperMasterService(dry_run=args.dry_run)
+    service = OmegaMasterService(dry_run=args.dry_run)
 
     # Register signal handlers
     signal.signal(signal.SIGINT, service._shutdown_handler)

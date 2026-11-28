@@ -1,4 +1,4 @@
-# V.E.S.P.E.R. Voice - Dual-Engine TTS (Gemini + Gooya Bozorg v1.5) [Phase 1.5]
+# OMEGA Voice - Dual-Engine TTS (Gemini + Gooya Bozorg v1.5) [Phase 1.5]
 # Low-Latency Streaming & Prosody-First Architecture:
 #   - Dynamic Runway Scheduler (Just-In-Time chunk sizing from live playback buffer + EWMA RTF)
 #   - Sentence-first Persian/English segmentation (preserves full-sentence cadence & decimals)
@@ -166,7 +166,7 @@ class _ContinuousAudioPlayer:
 
 
 class TTSEngine:
-    """C.E.L.E.S.T.E. Dual-Engine Speech Synthesis (Gemini REST + Dynamic Pipelined Gooya Bozorg v1.5)."""
+    """OMEGA Dual-Engine Speech Synthesis (Gemini REST + Dynamic Pipelined Gooya Bozorg v1.5)."""
 
     DEFAULT_SAMPLE_RATE = 24000
     SPEAK_QUEUE_MAX = 15
@@ -214,7 +214,7 @@ class TTSEngine:
 
         if (
             auto_preload
-            and not os.environ.get('VESPER_NO_AUTO_PRELOAD')
+            and not os.environ.get('OMEGA_NO_AUTO_PRELOAD')
             and self._engine_mode == 'gooya'
             and not bool(self._config.get('gooya_auto_unload', False))
         ):
@@ -239,7 +239,7 @@ class TTSEngine:
                 and not bool(self._config.get('gooya_auto_unload', False))
                 and not self._gooya_loaded
                 and not self._preloading
-                and not os.environ.get('VESPER_NO_AUTO_PRELOAD')
+                and not os.environ.get('OMEGA_NO_AUTO_PRELOAD')
             )
         if should_preload:
             self.preload_gooya(blocking=False)
@@ -354,8 +354,8 @@ class TTSEngine:
         text = re.sub(r'<action>.*?</action>', '', text, flags=re.DOTALL)
         text = re.sub(r'<fact>.*?</fact>', '', text, flags=re.DOTALL)
         text = re.sub(r'\[Action.*?\]', '', text)
-        text = re.sub(r'V\s*\.\s*E\s*\.\s*S\s*\.\s*P\s*\.\s*E\s*\.\s*R\.?', 'وِسپِر', text, flags=re.IGNORECASE)
-        text = re.sub(r'\bVESPER\b', 'وِسپِر', text, flags=re.IGNORECASE)
+        text = re.sub(r'O\s*\.\s*M\s*\.\s*E\s*\.\s*G\s*\.\s*A\.?', 'اُمگا', text, flags=re.IGNORECASE)
+        text = re.sub(r'\bOMEGA\b', 'اُمگا', text, flags=re.IGNORECASE)
         tone_match = re.search(r'\[\s*(?:لحن|حس|tone)\s*:\s*([^\]]+)\]', text, flags=re.IGNORECASE)
         explicit_tone = ''
         if tone_match:
@@ -765,7 +765,7 @@ class TTSEngine:
                 proc.stderr,
                 module_name='gooya_worker',
                 default_level=logging.INFO,
-                json_prefix='VESPER_LOG:',
+                json_prefix='OMEGA_LOG:',
                 thread_name='GooyaStderrPump',
             )
             threading.Thread(
@@ -1075,9 +1075,9 @@ class TTSEngine:
 
     def _apply_dsp(self, pcm: np.ndarray, sample_rate: int) -> np.ndarray:
         try:
-            from Voice.AudioDSP.vesper_dsp import VesperAudioDSP
+            from Voice.AudioDSP.omega_dsp import OmegaAudioDSP
             if getattr(self, '_dsp', None) is None or self._dsp._sr != sample_rate:
-                self._dsp = VesperAudioDSP(sample_rate=sample_rate)
+                self._dsp = OmegaAudioDSP(sample_rate=sample_rate)
             return self._dsp.process(pcm)
         except Exception as exc:
             logger.warning('DSP processing failed (bypassing DSP): %s', exc, exc_info=True)
@@ -1678,7 +1678,7 @@ def get_tts_engine() -> TTSEngine:
 
 if __name__ == '__main__':
     print('=' * 60)
-    print('C.E.L.E.S.T.E. TTSEngine Self-Test (Phase 1.5 Dynamic Runway)')
+    print('OMEGA TTSEngine Self-Test (Phase 1.5 Dynamic Runway)')
     print('=' * 60)
 
     t_start = time.time()
@@ -1688,10 +1688,10 @@ if __name__ == '__main__':
     print(f'Initialization: OK | Engine Mode: {status["engine_mode"]} | ContinuousAudio: {status["continuous_audio_available"]}')
     assert status['initialized'] is True
 
-    test_raw = 'سلام [لحن: شاد و پرانرژی] من V.E.S.P.E.R. هستم! <think>thought</think><think>unclosed'
+    test_raw = 'سلام [لحن: شاد و پرانرژی] من OMEGA هستم! <think>thought</think><think>unclosed'
     tone, clean = engine.clean_text_for_tts(test_raw)
     print(f'Clean text: "{clean}" | Tone: "{tone}"')
-    assert 'وسپر' in clean and '<think>' not in clean and 'unclosed' not in clean
+    assert 'اُمگا' in clean and '<think>' not in clean and 'unclosed' not in clean
     assert tone == 'شاد و پرانرژی'
 
     # Test 1: Short text (<=115 chars) stays single-shot for 100% prosody
@@ -1757,7 +1757,7 @@ if __name__ == '__main__':
     engine._synthesize_gemini = lambda text, tone, cfg: (
         engine._apply_dsp(np.zeros(24000, dtype=np.float32), 24000), 24000
     )
-    pcm, sr = engine.synthesize('وسپر آماده است.')
+    pcm, sr = engine.synthesize('اُمگا آماده است.')
     assert pcm is not None and len(pcm) == 24000 and sr == 24000
     engine._synthesize_gemini = original_gemini
 

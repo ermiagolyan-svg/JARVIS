@@ -1,4 +1,4 @@
-# V.E.S.P.E.R. Voice - Persian Inverse Text Normalization (ITN)
+# OMEGA Voice - Persian Inverse Text Normalization (ITN)
 # Converts spoken Persian numbers to integer digits (Persian/ASCII)
 
 import re

@@ -1,7 +1,7 @@
 {
     "system": {
-        "project_name": "VESPER",
-        "assistant_name": "V.E.S.P.E.R.",
+        "project_name": "OMEGA",
+        "assistant_name": "OMEGA",
         "version": "2.0.0",
         "language": "fa-IR",
         "log_level": "INFO",
@@ -60,7 +60,7 @@
         "gooya_auto_unload": false,
         "stt_model_dir": "Data/Models/stt/shenava",
         "stt_force_cpu": true,
-        "wake_word": "vesper",
+        "wake_word": "omega",
         "wake_threshold": 0.15,
         "dsp_pitch_semitones": 0.0,
         "dsp_metallic_mix": 0.0,
@@ -110,7 +110,7 @@
         "stall_timeout_sec": 3.0
     },
     "memory": {
-        "db_path": "Data/Memory/vesper_memory.db",
+        "db_path": "Data/Memory/omega_memory.db",
         "max_context_messages": 20,
         "retention_days": 365
     },

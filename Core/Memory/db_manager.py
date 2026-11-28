@@ -1,4 +1,4 @@
-"""Thread-safe SQLite database manager for V.E.S.P.E.R. memory persistence."""
+"""Thread-safe SQLite database manager for OMEGA memory persistence."""
 
 import sqlite3
 import threading
@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DB_PATH = _PROJECT_ROOT / "Data" / "Memory" / "vesper_memory.db"
+DB_PATH = _PROJECT_ROOT / "Data" / "Memory" / "omega_memory.db"
 
 
 class DatabaseManager:

@@ -1,4 +1,4 @@
-# C.E.L.E.S.T.E. Live Web, Currency & Google Search Engine
+# OMEGA Live Web, Currency & Google Search Engine
 import html
 import json
 import logging

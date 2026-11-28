@@ -1,4 +1,4 @@
-# V.E.S.P.E.R. Voice - Gooya Bozorg v1.5 Isolated Low-Latency Worker (Phase 1.5)
+# OMEGA Voice - Gooya Bozorg v1.5 Isolated Low-Latency Worker (Phase 1.5)
 # Runs in Data/Models/gooya/venv (Python 3.11 with torch 2.6.0+cu124)
 # Architecture:
 #   - Strictly offline (HF_HUB_OFFLINE=1, TRANSFORMERS_OFFLINE=1) + TQDM_DISABLE=1
@@ -38,7 +38,7 @@ try:
 except Exception:
     pass
 
-LOG_PREFIX = 'VESPER_LOG:'
+LOG_PREFIX = 'OMEGA_LOG:'
 RESP_PREFIX = 'GOOYA_WORKER_RESP:'
 _current_turn_id = '-'
 

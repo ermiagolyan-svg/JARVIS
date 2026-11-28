@@ -1,5 +1,5 @@
 """
-V.E.S.P.E.R. Configuration Engine
+OMEGA Configuration Engine
 Thread-safe Singleton ConfigManager that loads, validates, reads, updates,
 and saves Configuration/config.json with automatic default restoration.
 """
@@ -23,8 +23,8 @@ CONFIG_PATH = PROJECT_ROOT / "Configuration" / "config.json"
 # Default configuration values (used for automatic restoration of missing keys)
 DEFAULT_CONFIG: Dict[str, Any] = {
     "system": {
-        "project_name": "VESPER",
-        "assistant_name": "V.E.S.P.E.R.",
+        "project_name": "OMEGA",
+        "assistant_name": "OMEGA",
         "version": "2.0.0",
         "language": "fa-IR",
         "log_level": "INFO",
@@ -77,7 +77,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "gooya_auto_unload": False,
         "stt_model_dir": "Data/Models/stt/shenava",
         "stt_force_cpu": True,
-        "wake_word": "vesper",
+        "wake_word": "omega",
         "wake_threshold": 0.5,
         "dsp_pitch_semitones": -0.3,
         "dsp_metallic_mix": 0.0,
@@ -111,7 +111,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "stall_timeout_sec": 3.0,
     },
     "memory": {
-        "db_path": "Data/Memory/vesper_memory.db",
+        "db_path": "Data/Memory/omega_memory.db",
         "max_context_messages": 20,
         "retention_days": 365,
     },
@@ -158,7 +158,7 @@ class ConfigManager:
     """
     Thread-safe Singleton configuration manager.
 
-    Loads, validates, reads, updates, and saves the V.E.S.P.E.R. configuration
+    Loads, validates, reads, updates, and saves the OMEGA configuration
     file (Configuration/config.json) with automatic default restoration
     for any missing or invalid keys.
 

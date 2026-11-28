@@ -1,5 +1,5 @@
 ﻿CRITICAL WINDOWS, JSON & ARCHITECTURAL RULES:
-1. Working Directory is the project root (migrating to D:\AI\VESPER). Always use relative paths with forward slashes and NO leading slash.
+1. Working Directory is the project root (migrating to D:\AI\OMEGA). Always use relative paths with forward slashes and NO leading slash.
 2. FILE TOOLS ONLY: NEVER use run_commands (terminal, PowerShell, bash, python -c) to read, write, or edit code files. ALWAYS use read_file, write_to_file, or replace_in_file.
 3. NO POWERSHELL VARIABLES OR PIPES: NEVER use PowerShell "$" variables, pipes (|), or ForEach-Object in run_commands.
 4. NON-BLOCKING SELF-TESTS: Every __main__ self-test MUST finish in under 20 seconds and exit with code 0. NEVER start a blocking uvicorn.run() server, infinite microphone loop, or spawn a duplicate llama-server.exe into VRAM during tests. Always use fastapi.testclient.TestClient or mocks.

@@ -1,1 +1,1 @@
-# V.E.S.P.E.R. Network API package
+# OMEGA Network API package
