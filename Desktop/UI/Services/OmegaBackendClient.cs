@@ -5,12 +5,12 @@ using System.Net.Http.Json;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using VesperDesktop.Models;
+using OmegaDesktop.Models;
 using Microsoft.Win32;
 
-namespace VesperDesktop.Services;
+namespace OmegaDesktop.Services;
 
-public class VesperBackendClient : IDisposable
+public class OmegaBackendClient : IDisposable
 {
     private readonly HttpClient _http;
     private ClientWebSocket? _ws;
@@ -44,7 +44,7 @@ public class VesperBackendClient : IDisposable
             while (!string.IsNullOrEmpty(current))
             {
                 if (File.Exists(Path.Combine(current, "Configuration", "config.json")) ||
-                    File.Exists(Path.Combine(current, "Core", "vesper_main.py")))
+                    File.Exists(Path.Combine(current, "Core", "omega_main.py")))
                 {
                     return current;
                 }
@@ -57,7 +57,7 @@ public class VesperBackendClient : IDisposable
             while (!string.IsNullOrEmpty(current))
             {
                 if (File.Exists(Path.Combine(current, "Configuration", "config.json")) ||
-                    File.Exists(Path.Combine(current, "Core", "vesper_main.py")))
+                    File.Exists(Path.Combine(current, "Core", "omega_main.py")))
                 {
                     return current;
                 }
@@ -70,10 +70,10 @@ public class VesperBackendClient : IDisposable
         {
             // fallback below
         }
-        return @"D:\AI\VESPER";
+        return @"D:\AI\OMEGA";
     }
 
-    public VesperBackendClient(string host = "127.0.0.1", int port = 8765, string? projectRoot = null)
+    public OmegaBackendClient(string host = "127.0.0.1", int port = 8765, string? projectRoot = null)
     {
         _projectRoot = projectRoot ?? ResolveProjectRoot();
         BaseHttpUrl = $"http://{host}:{port}";
@@ -173,7 +173,7 @@ public class VesperBackendClient : IDisposable
         return false;
     }
 
-    public async Task<bool> PairWithPinAsync(string pin, string deviceName = "VesperDesktopPC")
+    public async Task<bool> PairWithPinAsync(string pin, string deviceName = "OmegaDesktopPC")
     {
         try
         {
@@ -536,7 +536,7 @@ public class VesperBackendClient : IDisposable
 
     // Windows Startup helper matching Stage 6.2 (HKCU Run Registry)
     private const string RunRegPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string RunValueName = "VESPER_AI_System";
+    private const string RunValueName = "OMEGA_AI_System";
 
     public bool IsWindowsStartupEnabled()
     {
@@ -557,7 +557,7 @@ public class VesperBackendClient : IDisposable
             if (key == null) return false;
             if (enabled)
             {
-                string vbsPath = Path.Combine(_projectRoot, "Installer", "start_vesper_hidden.vbs");
+                string vbsPath = Path.Combine(_projectRoot, "Installer", "start_omega_hidden.vbs");
                 key.SetValue(RunValueName, $"wscript.exe \"{vbsPath}\"");
             }
             else

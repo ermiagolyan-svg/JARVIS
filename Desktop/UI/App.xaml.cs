@@ -1,6 +1,6 @@
 ﻿using System.Windows;
 
-namespace VesperDesktop;
+namespace OmegaDesktop;
 
 public partial class App : Application
 {

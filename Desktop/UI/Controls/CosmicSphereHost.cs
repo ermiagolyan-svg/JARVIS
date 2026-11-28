@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Media;
 
-namespace VesperDesktop.Controls;
+namespace OmegaDesktop.Controls;
 
 public sealed class CosmicSphereHost : FrameworkElement
 {

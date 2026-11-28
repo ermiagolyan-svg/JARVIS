@@ -12,10 +12,10 @@ using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Shell;
 using System.Windows.Threading;
-using VesperDesktop.Models;
-using VesperDesktop.Services;
+using OmegaDesktop.Models;
+using OmegaDesktop.Services;
 
-namespace VesperDesktop;
+namespace OmegaDesktop;
 
 public class ChatDisplayItem
 {
@@ -24,7 +24,7 @@ public class ChatDisplayItem
     public string Timestamp { get; set; } = string.Empty;
     public bool IsUser { get; set; }
 
-    public string DisplaySender => IsUser ? "USER" : "V.E.S.P.E.R.";
+    public string DisplaySender => IsUser ? "USER" : "OMEGA";
     public HorizontalAlignment BubbleAlignment => IsUser ? HorizontalAlignment.Right : HorizontalAlignment.Left;
     public Thickness AccentBorderThickness => IsUser ? new Thickness(1, 1, 3, 1) : new Thickness(3, 1, 1, 1);
 
@@ -56,9 +56,9 @@ public class LogDisplayItem
 
 public partial class MainWindow : Window
 {
-    private static readonly string ConfigFilePath = System.IO.Path.Combine(VesperBackendClient.ResolveProjectRoot(), "Configuration", "config.json");
+    private static readonly string ConfigFilePath = System.IO.Path.Combine(OmegaBackendClient.ResolveProjectRoot(), "Configuration", "config.json");
 
-    private readonly VesperBackendClient _client;
+    private readonly OmegaBackendClient _client;
     private readonly WasapiAudioMeter _audioMeter = new();
     private readonly Stopwatch _frameWatch = new();
     private double _lastRenderSec;
@@ -127,7 +127,7 @@ public partial class MainWindow : Window
         LstConversation.ItemsSource = _chatMessages;
         LstLogs.ItemsSource = _visibleLogs;
 
-        _client = new VesperBackendClient();
+        _client = new OmegaBackendClient();
         _client.OnHudUpdate += HandleHudUpdateFromWs;
         _client.OnLiveLogEntry += HandleLiveLogFromWs;
         _client.OnConnectionStateChanged += HandleWsConnectionState;
@@ -318,16 +318,16 @@ public partial class MainWindow : Window
 
     private async void BtnTestWebSearch_Click(object sender, RoutedEventArgs e)
     {
-        TxtCloudConfigResult.Text = "Searching live web via V.E.S.P.E.R. backend...";
-        var res = await _client.SendChatAsync("وسپر، در گوگل سرچ کن آخرین اخبار فناوری و هوش مصنوعی چیست و خلاصه بگو.", "desktop");
+        TxtCloudConfigResult.Text = "Searching live web via OMEGA backend...";
+        var res = await _client.SendChatAsync("اُمگا، در گوگل سرچ کن آخرین اخبار فناوری و هوش مصنوعی چیست و خلاصه بگو.", "desktop");
         if (res != null && !string.IsNullOrWhiteSpace(res.EffectiveText))
         {
-            AppendChatMessage("V.E.S.P.E.R.", res.EffectiveText);
+            AppendChatMessage("OMEGA", res.EffectiveText);
             TxtCloudConfigResult.Text = $"[OK] Live web search response received ({DateTime.Now:HH:mm:ss}).";
         }
         else
         {
-            TxtCloudConfigResult.Text = "[WARN] Backend did not return a response. Make sure vesper_main.py is running.";
+            TxtCloudConfigResult.Text = "[WARN] Backend did not return a response. Make sure omega_main.py is running.";
         }
     }
 
@@ -720,8 +720,8 @@ public partial class MainWindow : Window
 
         _chatMessages.Add(new ChatDisplayItem
         {
-            SenderLabel = "V.E.S.P.E.R.",
-            Content = "سازه سایبرنتیک وسپر آماده به کار است. کالبد پردازشی، حافظه SQLite و روتر آنلاین/ابری در وضعیت پایدار قرار دارند.",
+            SenderLabel = "OMEGA",
+            Content = "سازه سایبرنتیک اُمگا آماده به کار است. کالبد پردازشی، حافظه SQLite و روتر آنلاین/ابری در وضعیت پایدار قرار دارند.",
             Timestamp = DateTime.Now.ToString("HH:mm:ss")
         });
 
@@ -812,7 +812,7 @@ public partial class MainWindow : Window
 
                 if (TryRecordMessageSignature(turnId, role, lastText))
                 {
-                    string sender = string.Equals(role, "user", StringComparison.OrdinalIgnoreCase) ? "USER" : "V.E.S.P.E.R.";
+                    string sender = string.Equals(role, "user", StringComparison.OrdinalIgnoreCase) ? "USER" : "OMEGA";
                     AppendChatMessage(sender, lastText);
                 }
             }
@@ -880,7 +880,7 @@ public partial class MainWindow : Window
         {
             stateBrush = activeAccent;
             HaloInnerStop.Color = (Color)ColorConverter.ConvertFromString("#38E78A4E");
-            TxtReactorSubtitle.Text = "VOCAL SYNTHESIS // وسپر در حال پاسخگویی...";
+            TxtReactorSubtitle.Text = "VOCAL SYNTHESIS // اُمگا در حال پاسخگویی...";
         }
         else
         {
@@ -1153,7 +1153,7 @@ public partial class MainWindow : Window
                 bool isUser = string.Equals(item.Role, "user", StringComparison.OrdinalIgnoreCase);
                 _chatMessages.Add(new ChatDisplayItem
                 {
-                    SenderLabel = isUser ? "USER" : "V.E.S.P.E.R.",
+                    SenderLabel = isUser ? "USER" : "OMEGA",
                     Content = item.Content,
                     Timestamp = item.Timestamp,
                     IsUser = isUser
@@ -1206,13 +1206,13 @@ public partial class MainWindow : Window
             if (isCurrentlyListening)
             {
                 await _client.SendWsCommandAsync("stop_listening", new { source = "desktop" });
-                TxtStatusBar.Text = "V.E.S.P.E.R. voice capture finalized.";
+                TxtStatusBar.Text = "OMEGA voice capture finalized.";
             }
             else
             {
                 await _client.SendWsCommandAsync("wake_trigger", new { source = "desktop", manual = true });
                 TxtChatStatus.Text = "LISTENING";
-                TxtStatusBar.Text = "V.E.S.P.E.R. Manual Mic Trigger Activated (F4).";
+                TxtStatusBar.Text = "OMEGA Manual Mic Trigger Activated (F4).";
             }
 
             await PollBackendSubsystemsAsync();
@@ -1284,7 +1284,7 @@ public partial class MainWindow : Window
         {
             string replyText = reply.EffectiveText.Trim();
             TryRecordMessageSignature(reply.TurnId, "assistant", replyText);
-            AppendChatMessage("V.E.S.P.E.R.", replyText);
+            AppendChatMessage("OMEGA", replyText);
             TxtChatStatus.Text = "ONLINE";
         }
         else
@@ -1467,10 +1467,10 @@ public partial class MainWindow : Window
 
     private async void BtnTestVoice_Click(object sender, RoutedEventArgs e)
     {
-        var res = await _client.SendChatAsync("وسپر، وضعیت کالبد پردازشی و موتور صوتی فعال خودت را گزارش بده.", "desktop");
+        var res = await _client.SendChatAsync("اُمگا، وضعیت کالبد پردازشی و موتور صوتی فعال خودت را گزارش بده.", "desktop");
         if (res != null && !string.IsNullOrWhiteSpace(res.EffectiveText))
         {
-            AppendChatMessage("V.E.S.P.E.R.", res.EffectiveText);
+            AppendChatMessage("OMEGA", res.EffectiveText);
         }
     }
 
